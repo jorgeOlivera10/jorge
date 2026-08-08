@@ -16,7 +16,7 @@ a quién fichar y por cuánto pujar**, con detección de chollos.
 | Fase | Contenido | Estado |
 |------|-----------|--------|
 | 1 | Esqueleto, config (.env), módulo de endpoints, CLI base | ✅ hecho |
-| 2 | Cliente de API (login, token, cabeceras, reintentos, throttle, caché) + verificación real | ⏳ |
+| 2 | Cliente de API (login, token, cabeceras, reintentos, throttle, caché) + `verify` | ✅ hecho |
 | 3 | Base de datos (SQLite/SQLAlchemy) + ingesta (jugadores, mercado, plantillas, tablón) | ⏳ |
 | 4 | Motor económico (saldo, puja máxima) + tests | ⏳ |
 | 5 | Recomendaciones (puntos esperados, chollos, puja) | ⏳ |
@@ -87,9 +87,18 @@ De momento (Fase 1):
 |---------|-------------|
 | `biwenger version` | Muestra la versión de la herramienta. |
 | `biwenger config`  | Muestra la configuración cargada y qué falta en `.env`. |
+| `biwenger verify`  | Llamada **real** al endpoint público de LaLiga para verificar/ajustar los IDs de `score`. Añade `--login` para probar también las credenciales. |
 
 Se irán documentando aquí `ingest`, `economy`, `recommend` y `daily` a medida que
 se implementen.
+
+> **Nota sobre `verify`:** compara el nº de jugadores y los puntos totales entre
+> Sofascore y Picas del AS. Si los totales **difieren**, los IDs de `score` son
+> correctos. Si te da error 403/red en un entorno con proxy restrictivo, ejecútalo
+> en tu máquina local:
+> ```bash
+> biwenger verify
+> ```
 
 ---
 

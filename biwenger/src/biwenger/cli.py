@@ -11,6 +11,8 @@ from rich.console import Console
 from rich.table import Table
 
 from biwenger import __version__
+from biwenger.api.client import BiwengerAPIError, BiwengerClient
+from biwenger.api.parse import extract_players, player_points
 from biwenger.config import get_settings
 from biwenger.logging_setup import setup_logging
 
@@ -80,6 +82,71 @@ def config() -> None:
         )
     else:
         console.print("\n[green]✓ Configuración completa.[/]")
+
+
+@app.command()
+def verify(
+    login: bool = typer.Option(
+        False, "--login", help="Hace login con las credenciales del .env antes de consultar."
+    ),
+) -> None:
+    """Llamada REAL al endpoint de datos de LaLiga para verificar los IDs de 'score'.
+
+    Consulta el endpoint público de competición para cada sistema de puntuación
+    configurado (sofascore, as) y compara el nº de jugadores y los puntos totales.
+    Si los totales difieren entre sistemas, los IDs de score son correctos.
+    """
+    s = get_settings()
+    client = BiwengerClient(s)
+    if login:
+        try:
+            client.login()
+        except BiwengerAPIError as exc:
+            console.print(f"[red]✗ Login: {exc}[/]")
+            raise typer.Exit(code=1)
+
+    table = Table(title="Verificación de la API de Biwenger")
+    table.add_column("Sistema", style="cyan")
+    table.add_column("score id", justify="right")
+    table.add_column("Jugadores", justify="right")
+    table.add_column("Σ puntos", justify="right")
+    table.add_column("Top jugador (pts)")
+
+    results: dict[str, int] = {}
+    ok = True
+    for name, score in s.scores.items():
+        try:
+            raw = client.get_competition_data(name)
+            players = extract_players(raw)
+            total = sum(player_points(p) for p in players)
+            top = max(players, key=player_points, default={})
+            top_desc = (
+                f"{top.get('name', '—')} ({player_points(top)})" if top else "—"
+            )
+            table.add_row(name, str(score), str(len(players)), f"{total:,}", top_desc)
+            results[name] = total
+        except Exception as exc:  # noqa: BLE001 - queremos reportar cualquier fallo real
+            ok = False
+            table.add_row(name, str(score), "[red]ERROR[/]", "—", f"[red]{exc}[/]")
+
+    console.print(table)
+
+    if not ok:
+        console.print(
+            "\n[yellow]⚠ Alguna consulta falló.[/] Si es un bloqueo de red, ejecútalo en tu "
+            "máquina local. Si es 4xx, revisa los IDs de score o las cabeceras en .env."
+        )
+        raise typer.Exit(code=1)
+
+    distinct = len(set(results.values()))
+    if distinct <= 1 and len(results) > 1:
+        console.print(
+            "\n[yellow]⚠ Los sistemas devuelven los MISMOS totales:[/] probablemente algún "
+            "id de 'score' no es correcto. Prueba otros valores en BIWENGER_SCORE_*."
+        )
+    else:
+        console.print("\n[green]✓ Los sistemas de puntuación devuelven datos distintos: IDs OK.[/]")
+    client.close()
 
 
 if __name__ == "__main__":  # pragma: no cover
