@@ -402,7 +402,14 @@ def verify(
         raise typer.Exit(code=1)
 
     distinct = len(set(results.values()))
-    if distinct <= 1 and len(results) > 1:
+    all_zero = set(results.values()) == {0}
+    if all_zero:
+        console.print(
+            "\n[cyan]ℹ Todos los sistemas dan 0 puntos:[/] la temporada aún no ha empezado "
+            "(no hay partidos jugados). No se puede comparar todavía; vuelve a probar tras la "
+            "1ª jornada. El score de tu liga (AS=5) es correcto de todos modos."
+        )
+    elif distinct <= 1 and len(results) > 1:
         console.print(
             "\n[yellow]⚠ Los sistemas devuelven los MISMOS totales:[/] probablemente algún "
             "id de 'score' no es correcto. Prueba otros valores en BIWENGER_SCORE_*."
