@@ -27,6 +27,21 @@ class FakeClient:
         return load_fixture("competition_data_sample.json")
 
 
+class FakeClientSquads(FakeClient):
+    """FakeClient que además sirve las plantillas (para el coste inicial)."""
+
+    COST = {501: 26_580_000, 502: 30_000_000, 503: 20_000_000}
+
+    def __init__(self):
+        self.team_calls = 0
+
+    def get_user_team(self, uid):
+        self.team_calls += 1
+        uid = int(uid)
+        return {"data": {"id": uid, "name": "x",
+                         "players": [{"id": uid * 10, "owner": {"price": self.COST[uid]}}]}}
+
+
 class FakeClientWithAccount(FakeClient):
     """Como FakeClient pero además expone /account con mi saldo real en la liga."""
 
@@ -95,6 +110,28 @@ def test_ingest_computes_expected_cash_for_me(tmp_path):
         # Sin /account: cash estimado = 40M + 1M prima - 20M fichajes = 21M
         assert ue.cash == 21_000_000
         assert ue.max_bid == 28_500_000
+
+
+def test_initial_squad_cost_makes_rival_cash_realistic(tmp_path):
+    settings = _settings(tmp_path)
+    engine = init_db(make_engine(settings))
+    client = FakeClientSquads()
+
+    with session_scope(engine) as s:
+        run_ingest(client, settings, s, today=date(2026, 8, 8))
+        # Rival B (503): 40M − 20M plantilla + 0.3M (cesión cobrada) = 20.3M
+        ue = s.scalar(select(models.UserEconomy).where(models.UserEconomy.user_id == 503))
+        assert ue.cash == 20_300_000
+        # el coste inicial se guardó
+        assert s.get(models.User, 503).initial_squad_cost == 20_000_000
+
+    calls_after_first = client.team_calls
+    assert calls_after_first == 3   # una por manager
+
+    # Segunda pasada: no vuelve a pedir plantillas (coste ya guardado).
+    with session_scope(engine) as s:
+        run_ingest(client, settings, s, today=date(2026, 8, 9))
+    assert client.team_calls == calls_after_first   # sin nuevas llamadas
 
 
 def test_ingest_uses_exact_balance_from_account(tmp_path):

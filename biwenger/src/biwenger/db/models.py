@@ -109,6 +109,9 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(120))
     join_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     is_me: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Coste de la plantilla INICIAL (draft), capturado una vez al inicio de la
+    # liga: presupuesto_inicial − este coste = saldo de partida del manager.
+    initial_squad_cost: Mapped[int | None] = mapped_column(nullable=True)
 
 
 class UserSquad(Base):

@@ -13,9 +13,11 @@ from sqlalchemy.orm import Session
 
 from biwenger.economy.engine import reconstruct
 from biwenger.economy.pain import compute_pain_ledger, summarize_pain
+from biwenger.db import models
 from biwenger.ingest.board import parse_board
 from biwenger.ingest.league import parse_standings
 from biwenger.ingest.players import parse_competition_players
+from biwenger.ingest.squads import parse_user_team
 from biwenger.ingest import store
 from biwenger.logging_setup import get_logger
 from biwenger.rules import LEAGUE_RULES
@@ -46,6 +48,32 @@ def _detect_me(client: Any, settings: Any) -> tuple[int | None, int | None]:
     except Exception as exc:  # noqa: BLE001 - degradamos con seguridad
         log.warning("No se pudo leer /account para detectar mi saldo: %s", exc)
     return fallback, None
+
+
+def _capture_initial_squad_costs(client: Any, session: Session, standings: list[dict]) -> dict[int, int]:
+    """Devuelve {user_id: coste_plantilla_inicial}, capturándolo una sola vez.
+
+    Si un manager ya tiene el coste guardado, se reutiliza (no se vuelve a pedir
+    su plantilla). Si no, y el cliente lo soporta, se pide su equipo y se suma el
+    precio de compra (owner.price) de cada jugador.
+    """
+    costs: dict[int, int] = {}
+    can_fetch = hasattr(client, "get_user_team")
+    for s in standings:
+        uid = s["user_id"]
+        user = session.get(models.User, uid)
+        if user is None:
+            continue
+        if user.initial_squad_cost is None and can_fetch:
+            try:
+                team = parse_user_team(client.get_user_team(str(uid)))
+                user.initial_squad_cost = sum((p.get("buy_price") or 0) for p in team["squad"])
+            except Exception as exc:  # noqa: BLE001 - degradamos con seguridad
+                log.warning("No se pudo leer la plantilla de %s: %s", uid, exc)
+        if user.initial_squad_cost is not None:
+            costs[uid] = user.initial_squad_cost
+    session.flush()
+    return costs
 
 
 def run_ingest(client: Any, settings: Any, session: Session, *, today: date | None = None) -> dict[str, Any]:
@@ -85,6 +113,12 @@ def run_ingest(client: Any, settings: Any, session: Session, *, today: date | No
     n_new = store.store_movements(session, parsed.movements)
     store.store_round_standings(session, parsed.round_results)
 
+    # 3b) Coste de la plantilla INICIAL de cada manager (saldo de partida =
+    #     40M − plantilla aleatoria). Se captura UNA vez (al inicio de la liga)
+    #     y se guarda; en ingestas posteriores no se vuelve a pedir. Con esto el
+    #     saldo estimado de los rivales parte de su caja real, no de 40M enteros.
+    starting_squad_cost = _capture_initial_squad_costs(client, session, standings)
+
     # 4) Motor económico.
     economies = reconstruct(
         parsed.movements,
@@ -93,6 +127,7 @@ def run_ingest(client: Any, settings: Any, session: Session, *, today: date | No
         initial_budget=settings.initial_budget,
         factor=settings.bid_team_value_factor,
         user_names=user_names,
+        starting_squad_cost=starting_squad_cost,
         exact_cash=exact_cash,
     )
     store.store_user_economy(session, today, economies)
