@@ -21,7 +21,7 @@ a quién fichar y por cuánto pujar**, con detección de chollos.
 | 4 | Motor económico (saldo, puja máxima) + Pain tracker (€ real) + tests | ✅ hecho |
 | 5 | Recomendaciones (puntos esperados, chollos, sugerencia de puja) | ✅ hecho |
 | 6 | Job diario idempotente + informe en Markdown | ✅ hecho |
-| — | Dashboard opcional en Streamlit | preparado, sin implementar |
+| — | Dashboard en Streamlit (con vista móvil) | ✅ hecho |
 
 **El código está completo.** Lo único que queda es tu parte: rellenar `.env` con
 tus credenciales/cabeceras reales, verificar los IDs de `score` en local
@@ -126,6 +126,33 @@ se implementen.
 > ```
 
 ---
+
+## Dashboard (y verlo en el móvil)
+
+Un panel visual con pestañas (Economía, Mi equipo, Chollos, Plantillas, Pain) que
+lee la base de datos que genera `biwenger daily`.
+
+```bash
+pip install -e ".[dashboard]"
+streamlit run dashboard/streamlit_app.py
+```
+
+Al arrancar, Streamlit muestra dos direcciones:
+
+```
+Local URL:   http://localhost:8501
+Network URL: http://192.168.x.x:8501   ← ábrela en el MÓVIL
+```
+
+**Para verlo en el móvil:** con el teléfono en el **mismo WiFi** que el PC, abre la
+**Network URL** en el navegador del móvil. El diseño es responsive.
+
+> El dashboard muestra lo último que ingirió `biwenger daily`; ejecútalo para
+> refrescar los datos (o programa el job diario). Botón "🔄 Recargar" para releer la BD.
+
+Para verlo **desde cualquier sitio** (no solo en casa) tienes dos opciones: dejar el PC
+encendido y exponer el puerto, o desplegarlo gratis en **Streamlit Community Cloud**
+(requiere que el job diario también corra en la nube; pregúntame y te lo monto).
 
 ## Sistemas de puntuación
 
