@@ -29,6 +29,12 @@ def parse_competition_players(raw: Any) -> list[dict[str, Any]]:
                 "price": _int(p.get("price")),
                 "price_increment": _int(p.get("priceIncrement")),
                 "status": p.get("status"),
+                "total_points": _int(p.get("points")),
+                "played": _int(p.get("played")),
+                "points_home": _int(p.get("pointsHome")),
+                "played_home": _int(p.get("playedHome")),
+                "points_away": _int(p.get("pointsAway")),
+                "played_away": _int(p.get("playedAway")),
                 "updated_at": datetime.utcnow(),
             }
         )

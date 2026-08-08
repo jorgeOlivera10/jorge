@@ -23,6 +23,9 @@ class FakeClient:
     def get_league(self):
         return load_fixture("league_sample.json")
 
+    def get_competition_data(self, score_name=None):
+        return load_fixture("competition_data_sample.json")
+
 
 def _settings(tmp_path) -> Settings:
     return Settings(
@@ -51,10 +54,15 @@ def test_ingest_populates_and_is_idempotent(tmp_path):
         summary2 = run_ingest(FakeClient(), settings, s, today=date(2026, 8, 8))
     assert summary2["movements_new"] == 0
 
+    # Primera pasada ingiere también los 4 jugadores del fixture de competición.
+    assert summary1["players_new"] == 4
+    assert summary2["players_new"] == 0   # upsert idempotente
+
     # La BD no ha duplicado filas
     with session_scope(engine) as s:
         assert s.scalar(select(func.count()).select_from(models.Movement)) == 4
         assert s.scalar(select(func.count()).select_from(models.User)) == 3
+        assert s.scalar(select(func.count()).select_from(models.Player)) == 4
         # economía guardada para los 3 managers
         assert s.scalar(select(func.count()).select_from(models.UserEconomy)) == 3
         # Jorge (501) marcado como 'yo'

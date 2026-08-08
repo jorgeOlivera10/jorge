@@ -38,6 +38,13 @@ class Player(Base):
     price: Mapped[int | None] = mapped_column(nullable=True)     # valor de mercado actual
     price_increment: Mapped[int | None] = mapped_column(nullable=True)
     status: Mapped[str | None] = mapped_column(String(40), nullable=True)  # ok, injured...
+    # Agregados de rendimiento (de competition_data, 1 llamada para todos):
+    total_points: Mapped[int | None] = mapped_column(nullable=True)
+    played: Mapped[int | None] = mapped_column(nullable=True)
+    points_home: Mapped[int | None] = mapped_column(nullable=True)
+    played_home: Mapped[int | None] = mapped_column(nullable=True)
+    points_away: Mapped[int | None] = mapped_column(nullable=True)
+    played_away: Mapped[int | None] = mapped_column(nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     points: Mapped[list["PlayerPoints"]] = relationship(back_populates="player")

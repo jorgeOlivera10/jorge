@@ -19,9 +19,13 @@ a quién fichar y por cuánto pujar**, con detección de chollos.
 | 2 | Cliente de API (login, token, cabeceras, reintentos, throttle, caché) + `verify` | ✅ hecho |
 | 3 | Base de datos (SQLite/SQLAlchemy) + ingesta idempotente (tablón, liga, jugadores) | ✅ hecho |
 | 4 | Motor económico (saldo, puja máxima) + Pain tracker (€ real) + tests | ✅ hecho |
-| 5 | Recomendaciones (puntos esperados, chollos, puja) | ⏳ |
-| 6 | Job diario idempotente + informe | ⏳ |
+| 5 | Recomendaciones (puntos esperados, chollos, sugerencia de puja) | ✅ hecho |
+| 6 | Job diario idempotente + informe en Markdown | ✅ hecho |
 | — | Dashboard opcional en Streamlit | preparado, sin implementar |
+
+**El código está completo.** Lo único que queda es tu parte: rellenar `.env` con
+tus credenciales/cabeceras reales, verificar los IDs de `score` en local
+(`biwenger verify`) y ejecutar. Ver "Setup" y "Cómo capturar mis cabeceras".
 
 ---
 
@@ -92,6 +96,19 @@ De momento (Fase 1):
 | `biwenger ingest`  | **Ingesta diaria**: login → tablón completo + standings, reconstruye la economía de cada manager y el Pain tracker, y guarda todo en la BD. Idempotente (solo añade lo nuevo). |
 | `biwenger economy` | Muestra la última **economía estimada** por manager: saldo, valor de equipo, **puja máxima** y total. |
 | `biwenger pain`    | Muestra el **Pain tracker**: marcador de dinero **real** (€) por manager según los castigos de jornada. |
+| `biwenger recommend` | **Chollos** (mejor relación puntos/precio) y **sugerencia de puja**. Opciones: `--top N`, `--max-price`, `--position 1..4`, `--min-games`, y `--player <id>` para una sugerencia de puja concreta (cruza tu puja máxima con el techo de tus rivales). |
+| `biwenger daily`   | **Job diario**: login → ingesta idempotente → deja un **informe** fechado en `reports/AAAA-MM-DD.md`. |
+
+### Automatizar el job diario
+
+`biwenger daily` es idempotente (procesa solo lo nuevo), así que puedes programarlo:
+
+```bash
+# cron (Linux/Mac): todos los días a las 09:00
+0 9 * * *  cd /ruta/a/biwenger && ./.venv/bin/biwenger daily >> logs/daily.log 2>&1
+```
+
+En Windows usa el **Programador de tareas** apuntando a `.\.venv\Scripts\biwenger.exe daily`.
 
 Se irán documentando aquí `ingest`, `economy`, `recommend` y `daily` a medida que
 se implementen.

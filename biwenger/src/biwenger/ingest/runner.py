@@ -15,6 +15,7 @@ from biwenger.economy.engine import reconstruct
 from biwenger.economy.pain import compute_pain_ledger, summarize_pain
 from biwenger.ingest.board import parse_board
 from biwenger.ingest.league import parse_standings
+from biwenger.ingest.players import parse_competition_players
 from biwenger.ingest import store
 from biwenger.logging_setup import get_logger
 from biwenger.rules import LEAGUE_RULES
@@ -63,12 +64,31 @@ def run_ingest(client: Any, settings: Any, session: Session, *, today: date | No
     pain_entries = compute_pain_ledger(parsed.round_results, LEAGUE_RULES)
     store.store_real_money_ledger(session, pain_entries)
 
+    # 6) Jugadores + valor de mercado del día (1 sola llamada al 'data' de
+    #    competición). Defensivo: si el cliente no lo soporta o falla, se omite.
+    players_new = 0
+    if hasattr(client, "get_competition_data"):
+        try:
+            raw_players = client.get_competition_data(settings.score_default)
+            players = parse_competition_players(raw_players)
+            players_new = store.upsert_players(session, players)
+            market_values = [
+                {"player_id": p["id"], "date": today, "price": p["price"]}
+                for p in players
+                if p.get("price") is not None
+            ]
+            store.store_market_values(session, market_values)
+            log.info("Jugadores ingeridos: %d (nuevos %d)", len(players), players_new)
+        except Exception as exc:  # noqa: BLE001 - la API es no oficial; degradamos
+            log.warning("No se pudo ingerir jugadores: %s", exc)
+
     return {
         "date": today,
         "movements_total": len(parsed.movements),
         "movements_new": n_new,
         "round_results": len(parsed.round_results),
         "managers": len(economies),
+        "players_new": players_new,
         "unknown_types": dict(parsed.unknown_types),
         "economy": economies,
         "pain": summarize_pain(pain_entries),

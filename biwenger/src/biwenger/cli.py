@@ -227,6 +227,127 @@ def pain() -> None:
 
 
 @app.command()
+def recommend(
+    top: int = typer.Option(15, help="Número de chollos a mostrar."),
+    max_price: int = typer.Option(0, help="Precio máximo (0 = sin límite)."),
+    position: int = typer.Option(0, help="Filtrar por posición: 1 PT, 2 DF, 3 MC, 4 DL (0 = todas)."),
+    min_games: int = typer.Option(3, help="Partidos mínimos jugados para evitar espejismos."),
+    player: int = typer.Option(0, help="ID de jugador para una sugerencia de puja concreta."),
+) -> None:
+    """Detecta chollos y sugiere puja teniendo en cuenta el techo de tus rivales."""
+    from sqlalchemy import select
+    from biwenger.analysis.expected import analyze_players
+    from biwenger.analysis.recommend import RivalCeiling, rank_chollos, suggest_bid
+    from biwenger.db import models
+    from biwenger.db.session import make_engine, session_scope
+
+    with session_scope(make_engine()) as session:
+        players = session.scalars(select(models.Player)).all()
+        if not players:
+            console.print("[yellow]No hay jugadores en la BD. Ejecuta 'biwenger ingest' primero.[/]")
+            return
+        values = analyze_players(list(players))
+
+        # Economía: mi puja máxima y el techo de los rivales.
+        last_date = session.scalar(select(models.UserEconomy.date).order_by(models.UserEconomy.date.desc()))
+        my_max_bid = 0
+        rival_ceilings: list[RivalCeiling] = []
+        if last_date is not None:
+            rows = session.execute(
+                select(models.UserEconomy, models.User)
+                .join(models.User, models.User.id == models.UserEconomy.user_id, isouter=True)
+                .where(models.UserEconomy.date == last_date)
+            ).all()
+            for ue, user in rows:
+                if user is not None and user.is_me:
+                    my_max_bid = ue.max_bid
+                else:
+                    rival_ceilings.append(
+                        RivalCeiling(user_id=ue.user_id, name=(user.name if user else None), max_bid=ue.max_bid)
+                    )
+
+        by_id = {v.player_id: v for v in values}
+
+    # Sugerencia de puja para un jugador concreto.
+    if player:
+        target = by_id.get(player)
+        if target is None:
+            console.print(f"[red]Jugador {player} no encontrado.[/]")
+            raise typer.Exit(code=1)
+        if not my_max_bid:
+            console.print("[yellow]Sin economía calculada: la sugerencia usará solo el mercado.[/]")
+        sug = suggest_bid(target, my_max_bid, rival_ceilings)
+        t = Table(title=f"Sugerencia de puja — {target.name}")
+        t.add_column("Concepto", style="cyan")
+        t.add_column("Valor", justify="right")
+        t.add_row("Precio mercado", _money(sug.market_price))
+        t.add_row("Puja de valor (+15%)", _money(sug.value_bid))
+        t.add_row("Para superar rivales", _money(sug.bid_to_beat_rivals))
+        t.add_row("Tu puja máxima", _money(sug.my_max_bid))
+        if sug.top_rival:
+            t.add_row("Mayor rival", f"{sug.top_rival.name}: {_money(sug.top_rival.max_bid)}")
+        t.add_row("[bold]Puja sugerida[/]", f"[bold]{_money(sug.suggested_bid)}[/]")
+        console.print(t)
+        console.print(f"[dim]{sug.note}[/]")
+        return
+
+    # Ranking de chollos.
+    chollos = rank_chollos(
+        values,
+        min_games=min_games,
+        max_price=max_price or None,
+        position=position or None,
+        top=top,
+    )
+    if not chollos:
+        console.print("[yellow]No hay chollos con esos filtros (¿temporada sin empezar?).[/]")
+        return
+
+    table = Table(title="Chollos — mejor relación puntos/precio")
+    table.add_column("Jugador", style="cyan")
+    table.add_column("Pos", justify="center")
+    table.add_column("Equipo")
+    table.add_column("Precio", justify="right")
+    table.add_column("Pts/part.", justify="right")
+    table.add_column("Esperados", justify="right")
+    table.add_column("Valor (pts/M€)", justify="right", style="bold green")
+    for c in chollos:
+        table.add_row(
+            c.name or "—", c.position_name, c.team_name or "—",
+            _money(c.price), str(c.points_per_match), str(c.expected_points), str(c.value_ratio),
+        )
+    console.print(table)
+    console.print(
+        "[dim]Valor = puntos esperados por millón. Esperados = pts/partido × fiabilidad × tendencia.[/]"
+    )
+
+
+@app.command()
+def daily() -> None:
+    """Job diario: ingesta + informe del día en reports/ (idempotente)."""
+    from biwenger.jobs.daily import run_daily
+
+    s = get_settings()
+    if not s.user_id or not s.league_id:
+        console.print("[red]Faltan X-User / X-League en .env.[/] Ejecuta 'biwenger config'.")
+        raise typer.Exit(code=1)
+
+    client = BiwengerClient(s)
+    try:
+        client.login()
+    except BiwengerAPIError as exc:
+        console.print(f"[red]✗ Login: {exc}[/]")
+        raise typer.Exit(code=1)
+
+    path, summary = run_daily(client, s)
+    client.close()
+    console.print(
+        f"[green]✓ Informe del día:[/] {path}  "
+        f"([cyan]{summary['movements_new']}[/] movimientos nuevos)"
+    )
+
+
+@app.command()
 def verify(
     login: bool = typer.Option(
         False, "--login", help="Hace login con las credenciales del .env antes de consultar."

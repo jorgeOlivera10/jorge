@@ -26,6 +26,9 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
+# Informes generados por el job diario
+reports/
+
 # Logs
 *.log
 logs/
