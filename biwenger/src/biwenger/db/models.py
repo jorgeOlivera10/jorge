@@ -45,6 +45,14 @@ class Player(Base):
     played_home: Mapped[int | None] = mapped_column(nullable=True)
     points_away: Mapped[int | None] = mapped_column(nullable=True)
     played_away: Mapped[int | None] = mapped_column(nullable=True)
+    # Enriquecimiento desde la ficha detallada del jugador (scouting):
+    status_info: Mapped[str | None] = mapped_column(String(200), nullable=True)  # texto del estado
+    news_title: Mapped[str | None] = mapped_column(String(300), nullable=True)   # última noticia
+    news_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    last_season_points: Mapped[int | None] = mapped_column(nullable=True)
+    last_season_games: Mapped[int | None] = mapped_column(nullable=True)
+    fitness_avg: Mapped[float | None] = mapped_column(Float, nullable=True)      # forma reciente
+    scouted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     points: Mapped[list["PlayerPoints"]] = relationship(back_populates="player")
@@ -69,6 +77,21 @@ class PlayerPoints(Base):
     star: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     player: Mapped[Player] = relationship(back_populates="points")
+
+
+class PlayerNews(Base):
+    """Noticia de un jugador (lesión, duda, alineación...) — histórico."""
+
+    __tablename__ = "player_news"
+    __table_args__ = (
+        UniqueConstraint("player_id", "date", "title", name="uq_news_player_date_title"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    player_id: Mapped[int] = mapped_column(ForeignKey("players.id"), index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    content: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
 
 class MarketValue(Base):

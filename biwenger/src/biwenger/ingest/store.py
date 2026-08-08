@@ -216,6 +216,50 @@ def store_real_money_ledger(session: Session, entries: Iterable[Any]) -> int:
     return n
 
 
+def update_player_scouting(session: Session, detail: dict[str, Any]) -> None:
+    """Actualiza los campos de scouting de un Player desde una ficha parseada."""
+    from datetime import datetime
+
+    pid = detail.get("player_id")
+    if pid is None:
+        return
+    player = session.get(models.Player, pid)
+    if player is None:
+        return
+    if detail.get("status"):
+        player.status = detail["status"]
+    player.status_info = detail.get("status_info")
+    player.news_title = detail.get("news_title")
+    player.news_date = detail.get("news_date")
+    player.fitness_avg = detail.get("fitness_avg")
+    player.last_season_points = detail.get("last_season_points")
+    player.last_season_games = detail.get("last_season_games")
+    player.scouted_at = datetime.utcnow()
+    session.flush()
+
+
+def store_player_news(session: Session, player_id: int, news: Iterable[dict[str, Any]]) -> int:
+    n = 0
+    for item in news:
+        if not item.get("date") or not item.get("title"):
+            continue
+        exists = session.scalar(
+            select(models.PlayerNews.id).where(
+                models.PlayerNews.player_id == player_id,
+                models.PlayerNews.date == item["date"],
+                models.PlayerNews.title == item["title"],
+            )
+        )
+        if exists is None:
+            session.add(models.PlayerNews(
+                player_id=player_id, date=item["date"],
+                title=item["title"], content=item.get("content"),
+            ))
+            n += 1
+    session.flush()
+    return n
+
+
 def store_squad(session: Session, snapshot_date: date, user_id: int, squad: Iterable[dict[str, Any]]) -> int:
     n = 0
     for row in squad:

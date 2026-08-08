@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from biwenger.economy.engine import reconstruct
@@ -17,6 +18,7 @@ from biwenger.db import models
 from biwenger.ingest.board import parse_board
 from biwenger.ingest.league import parse_standings
 from biwenger.ingest.players import parse_competition_players
+from biwenger.ingest.scout import scout_players
 from biwenger.ingest.squads import parse_user_team
 from biwenger.ingest import store
 from biwenger.logging_setup import get_logger
@@ -158,6 +160,21 @@ def run_ingest(client: Any, settings: Any, session: Session, *, today: date | No
         except Exception as exc:  # noqa: BLE001 - la API es no oficial; degradamos
             log.warning("No se pudo ingerir jugadores: %s", exc)
 
+    # 7) Scouting de MI plantilla: estado físico, noticias, forma, minutos.
+    scouted = 0
+    if my_league_uid is not None and hasattr(client, "get_player_detail"):
+        my_player_ids = list(session.scalars(
+            select(models.UserSquad.player_id).where(
+                models.UserSquad.date == today,
+                models.UserSquad.user_id == my_league_uid,
+            )
+        ))
+        if my_player_ids:
+            scouted = scout_players(
+                client, session, my_player_ids,
+                score_name=settings.score_default, today=today,
+            )
+
     return {
         "date": today,
         "movements_total": len(parsed.movements),
@@ -165,6 +182,7 @@ def run_ingest(client: Any, settings: Any, session: Session, *, today: date | No
         "round_results": len(parsed.round_results),
         "managers": len(economies),
         "players_new": players_new,
+        "scouted": scouted,
         "unknown_types": dict(parsed.unknown_types),
         "economy": economies,
         "pain": summarize_pain(pain_entries),

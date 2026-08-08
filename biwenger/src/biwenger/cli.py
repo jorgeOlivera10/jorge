@@ -279,13 +279,23 @@ def squads(
 
 
 @app.command()
-def market() -> None:
-    """Muestra los jugadores en el MERCADO hoy, con valor y sugerencia de puja."""
+def market(
+    bank_only: bool = typer.Option(True, help="Mostrar solo los jugadores que vende la BANCA."),
+    scout: bool = typer.Option(True, help="Descargar estado/noticias de los jugadores de la banca."),
+) -> None:
+    """Jugadores en el MERCADO hoy, con estado, si es titular, noticia y puja sugerida.
+
+    Por defecto muestra solo los de la banca (los que te interesan) y descarga su
+    ficha (lesión/duda, forma, rendimiento esperado).
+    """
     from sqlalchemy import select
     from biwenger.analysis.expected import compute_player_value
     from biwenger.analysis.recommend import RivalCeiling, suggest_bid
+    from biwenger.analysis.scouting import player_outlook
     from biwenger.db import models
     from biwenger.db.session import make_engine, session_scope
+    from biwenger.ingest.market import parse_market
+    from biwenger.ingest.scout import scout_players
 
     s = get_settings()
     if not s.user_id or not s.league_id:
@@ -293,72 +303,175 @@ def market() -> None:
         raise typer.Exit(code=1)
 
     client = BiwengerClient(s)
+    engine = make_engine(s)
     try:
         client.login()
-        raw = client.get_my_market()
-    except BiwengerAPIError as exc:
-        console.print(f"[red]✗ {exc}[/]")
-        raise typer.Exit(code=1)
+        sales = parse_market(client.get_my_market())
+        if not sales:
+            console.print("[yellow]No hay jugadores en el mercado ahora (o la API cambió el formato).[/]")
+            return
+        if bank_only:
+            sales = [x for x in sales if not x["seller_id"]]
+            if not sales:
+                console.print("[yellow]La banca no tiene jugadores en el mercado ahora mismo.[/]")
+                return
+
+        with session_scope(engine) as session:
+            # Scouting de los jugadores del mercado (acotado a los mostrados).
+            if scout:
+                ids = [x["player_id"] for x in sales]
+                console.print(f"[dim]Analizando {len(ids)} jugadores del mercado…[/]")
+                scout_players(client, session, ids, score_name=s.score_default)
+
+            players = {p.id: p for p in session.scalars(select(models.Player)).all()}
+            rounds_played = max((pl.played or 0) for pl in players.values()) or None
+            last_date = session.scalar(select(models.UserEconomy.date).order_by(models.UserEconomy.date.desc()))
+            my_max_bid, rivals = 0, []
+            if last_date is not None:
+                for ue, u in session.execute(
+                    select(models.UserEconomy, models.User)
+                    .join(models.User, models.User.id == models.UserEconomy.user_id, isouter=True)
+                    .where(models.UserEconomy.date == last_date)
+                ).all():
+                    if u is not None and u.is_me:
+                        my_max_bid = ue.max_bid
+                    else:
+                        rivals.append(RivalCeiling(ue.user_id, u.name if u else None, ue.max_bid))
+            seller_names = {u.id: u.name for u in session.scalars(select(models.User)).all()}
+
+            rows = []
+            for sale in sales:
+                p = players.get(sale["player_id"])
+                if p is None:
+                    continue
+                rows.append((sale, p, compute_player_value(p, rounds_played), player_outlook(p)))
     finally:
         client.close()
 
-    from biwenger.ingest.market import parse_market
-    sales = parse_market(raw)
-    if not sales:
-        console.print("[yellow]No hay jugadores en el mercado ahora mismo (o la API cambió el formato).[/]")
-        return
-
-    # Enriquecemos con datos de la BD (rendimiento + economía para la puja).
-    with session_scope(make_engine()) as session:
-        players = {p.id: p for p in session.scalars(select(models.Player)).all()}
-        # nº de jornadas jugadas (proxy) para la fiabilidad
-        rounds_played = max((pl.played or 0) for pl in players.values()) or None
-        last_date = session.scalar(select(models.UserEconomy.date).order_by(models.UserEconomy.date.desc()))
-        my_max_bid, rivals = 0, []
-        if last_date is not None:
-            for ue, u in session.execute(
-                select(models.UserEconomy, models.User)
-                .join(models.User, models.User.id == models.UserEconomy.user_id, isouter=True)
-                .where(models.UserEconomy.date == last_date)
-            ).all():
-                if u is not None and u.is_me:
-                    my_max_bid = ue.max_bid
-                else:
-                    rivals.append(RivalCeiling(ue.user_id, u.name if u else None, ue.max_bid))
-        seller_names = {u.id: u.name for u in session.scalars(select(models.User)).all()}
-
-    rows = []
-    for sale in sales:
-        p = players.get(sale["player_id"])
-        if p is None:
-            continue
-        pv = compute_player_value(p, rounds_played)
-        rows.append((sale, p, pv))
     rows.sort(key=lambda r: r[2].value_ratio, reverse=True)
-
-    table = Table(title="Mercado de hoy — ordenado por relación puntos/precio")
+    table = Table(title="Mercado de hoy" + (" (banca)" if bank_only else ""))
     table.add_column("Jugador", style="cyan")
     table.add_column("Pos", justify="center")
     table.add_column("Precio", justify="right")
-    table.add_column("Vende", justify="left")
-    table.add_column("Pts/part.", justify="right")
+    if not bank_only:
+        table.add_column("Vende")
+    table.add_column("Estado")
+    table.add_column("¿Juega?")
+    table.add_column("Esperado", justify="right")
     table.add_column("Valor", justify="right", style="bold green")
-    table.add_column("Puja sugerida", justify="right")
+    table.add_column("Puja sug.", justify="right")
+    table.add_column("Nota")
     POS = {1: "PT", 2: "DF", 3: "MC", 4: "DL"}
-    for sale, p, pv in rows:
+    for sale, p, pv, o in rows:
         sug = suggest_bid(pv, my_max_bid, rivals) if my_max_bid else None
-        seller = "banca" if not sale["seller_id"] else seller_names.get(sale["seller_id"], "rival")
         price = sale["price"] if sale["price"] is not None else p.price
-        table.add_row(
-            p.name or "—", POS.get(p.position or 0, "?"), _money(price), str(seller),
-            str(pv.points_per_match), str(pv.value_ratio),
+        cells = [p.name or "—", POS.get(p.position or 0, "?"), _money(price)]
+        if not bank_only:
+            cells.append("banca" if not sale["seller_id"] else seller_names.get(sale["seller_id"], "rival"))
+        cells += [
+            o.status_label, o.will_play,
+            f"{o.expected_ppg}" if o.expected_ppg is not None else "—",
+            str(pv.value_ratio),
             _money(sug.suggested_bid) if sug else "—",
-        )
+            ("[red]⚠ [/]" if o.sell_now else "") + (o.news_title or ""),
+        ]
+        table.add_row(*cells, style="red" if o.sell_now else None)
     console.print(table)
     console.print(
-        "[dim]Valor = puntos esperados por millón. 'Puja sugerida' = mercado +15%, "
-        "limitada por tu puja máxima. Al inicio de liga aún no hay puntos.[/]"
+        "[dim]'Esperado' = pts/partido (temp. actual o pasada). 'Valor' = pts esperados por millón. "
+        "Puja sugerida = mercado +15%, limitada por tu puja máxima.[/]"
     )
+
+
+def _trend(inc: int | None) -> str:
+    if not inc:
+        return "→"
+    return f"[green]↑{inc:,.0f}[/]" if inc > 0 else f"[red]↓{abs(inc):,.0f}[/]"
+
+
+@app.command()
+def team() -> None:
+    """Tu plantilla con estado, si va a jugar, rendimiento esperado y alertas de venta."""
+    from sqlalchemy import select
+    from biwenger.analysis.scouting import player_outlook
+    from biwenger.db import models
+    from biwenger.db.session import make_engine, session_scope
+
+    with session_scope(make_engine()) as session:
+        me = session.scalar(select(models.User).where(models.User.is_me.is_(True)))
+        if me is None:
+            console.print("[yellow]No sé cuál eres tú aún. Ejecuta 'biwenger daily'.[/]")
+            return
+        last_date = session.scalar(
+            select(models.UserSquad.date).where(models.UserSquad.user_id == me.id)
+            .order_by(models.UserSquad.date.desc())
+        )
+        players = session.scalars(
+            select(models.Player)
+            .join(models.UserSquad, models.UserSquad.player_id == models.Player.id)
+            .where(models.UserSquad.user_id == me.id, models.UserSquad.date == last_date)
+        ).all()
+
+    if not players:
+        console.print("[yellow]No hay plantilla guardada. Ejecuta 'biwenger daily'.[/]")
+        return
+
+    outlooks = sorted((player_outlook(p) for p in players),
+                      key=lambda o: (not o.sell_now, -(o.expected_ppg or -1)))
+    POS = {1: "PT", 2: "DF", 3: "MC", 4: "DL"}
+    table = Table(title=f"Tu equipo ({me.name})")
+    table.add_column("Jugador", style="cyan")
+    table.add_column("Pos", justify="center")
+    table.add_column("Estado")
+    table.add_column("¿Juega?")
+    table.add_column("Esperado", justify="right")
+    table.add_column("Precio", justify="right")
+    table.add_column("Tend.", justify="right")
+    table.add_column("Nota")
+    for o in outlooks:
+        row_style = "red" if o.sell_now else None
+        table.add_row(
+            o.name or "—", POS.get(o.position or 0, "?"), o.status_label, o.will_play,
+            f"{o.expected_ppg} ({o.basis})" if o.expected_ppg is not None else "sin datos",
+            _money(o.price), _trend(o.price_increment),
+            ("[bold red]VENDER[/] " if o.sell_now else "") + (o.news_title or ""),
+            style=row_style,
+        )
+    console.print(table)
+    console.print("[dim]'Esperado' = puntos/partido (esta temporada o, si no hay, la pasada).[/]")
+
+
+@app.command()
+def alerts() -> None:
+    """Solo alertas: jugadores tuyos lesionados/dudas/sancionados o con noticia → vender."""
+    from sqlalchemy import select
+    from biwenger.analysis.scouting import player_outlook
+    from biwenger.db import models
+    from biwenger.db.session import make_engine, session_scope
+
+    with session_scope(make_engine()) as session:
+        me = session.scalar(select(models.User).where(models.User.is_me.is_(True)))
+        if me is None:
+            console.print("[yellow]Ejecuta 'biwenger daily' primero.[/]")
+            return
+        last_date = session.scalar(
+            select(models.UserSquad.date).where(models.UserSquad.user_id == me.id)
+            .order_by(models.UserSquad.date.desc())
+        )
+        players = session.scalars(
+            select(models.Player)
+            .join(models.UserSquad, models.UserSquad.player_id == models.Player.id)
+            .where(models.UserSquad.user_id == me.id, models.UserSquad.date == last_date)
+        ).all()
+
+    riesgos = [o for o in (player_outlook(p) for p in players) if o.sell_now]
+    if not riesgos:
+        console.print("[green]✓ Ningún jugador tuyo con alerta. Todo en orden.[/]")
+        return
+    console.print("[bold red]⚠ Jugadores a revisar / vender:[/]")
+    for o in riesgos:
+        console.print(f"  • [cyan]{o.name}[/] — {o.status_label}"
+                      + (f" · {o.news_title}" if o.news_title else ""))
 
 
 @app.command()
