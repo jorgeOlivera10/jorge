@@ -40,8 +40,8 @@ class Settings(BaseSettings):
 
     # --- Sistemas de puntuación (parámetro ?score=) ---
     score_sofascore: int = Field(default=1, description="ID score de Sofascore (verificar).")
-    score_as: int = Field(default=5, description="ID score de Picas del AS (verificar).")
-    score_default: str = Field(default="sofascore", description="'sofascore' o 'as'.")
+    score_as: int = Field(default=5, description="ID score de Picas del AS (scoreID de la liga).")
+    score_default: str = Field(default="as", description="'sofascore' o 'as' (la liga usa AS=5).")
 
     # --- Economía ---
     initial_budget: int = Field(default=40_000_000, description="Presupuesto inicial por manager.")

@@ -23,6 +23,31 @@ from biwenger.rules import LEAGUE_RULES
 log = get_logger(__name__)
 
 
+def _detect_me(client: Any, settings: Any) -> tuple[int | None, int | None]:
+    """Devuelve (mi_user_id_en_la_liga, mi_saldo_exacto) vía /account.
+
+    Defensivo: si el cliente no soporta get_account o falla, cae a settings.user_id
+    (sin saldo exacto).
+    """
+    fallback = int(settings.user_id) if str(settings.user_id).isdigit() else None
+    if not hasattr(client, "get_account"):
+        return fallback, None
+    try:
+        data = client.get_account()
+        data = data.get("data", data) if isinstance(data, dict) else {}
+        for lg in data.get("leagues", []) or []:
+            if not isinstance(lg, dict) or str(lg.get("id")) != str(settings.league_id):
+                continue
+            user = lg.get("user") if isinstance(lg.get("user"), dict) else {}
+            uid = user.get("id")
+            uid = int(uid) if isinstance(uid, (int, str)) and str(uid).isdigit() else fallback
+            balance = user.get("balance") if isinstance(user.get("balance"), int) else None
+            return uid, balance
+    except Exception as exc:  # noqa: BLE001 - degradamos con seguridad
+        log.warning("No se pudo leer /account para detectar mi saldo: %s", exc)
+    return fallback, None
+
+
 def run_ingest(client: Any, settings: Any, session: Session, *, today: date | None = None) -> dict[str, Any]:
     """Ejecuta una pasada de ingesta completa (tablón + liga + economía + pain)."""
     today = today or date.today()
@@ -39,8 +64,19 @@ def run_ingest(client: Any, settings: Any, session: Session, *, today: date | No
     standings = parse_standings(client.get_league())
     team_values = {s["user_id"]: s["team_value"] for s in standings}
     user_names = {s["user_id"]: s["name"] for s in standings}
+
+    # 2b) Mi id de usuario EN LA LIGA y mi saldo exacto (la API expone el mío).
+    #     El X-User configurado puede ser el id de cuenta; el de standings es el
+    #     de membresía en la liga. Los resolvemos vía /account de forma defensiva.
+    my_league_uid, my_balance = _detect_me(client, settings)
+    exact_cash = {my_league_uid: my_balance} if (my_league_uid and my_balance is not None) else {}
+
     users = [
-        {"id": s["user_id"], "name": s["name"], "is_me": str(s["user_id"]) == str(settings.user_id)}
+        {
+            "id": s["user_id"],
+            "name": s["name"],
+            "is_me": my_league_uid is not None and s["user_id"] == my_league_uid,
+        }
         for s in standings
     ]
 
@@ -57,6 +93,7 @@ def run_ingest(client: Any, settings: Any, session: Session, *, today: date | No
         initial_budget=settings.initial_budget,
         factor=settings.bid_team_value_factor,
         user_names=user_names,
+        exact_cash=exact_cash,
     )
     store.store_user_economy(session, today, economies)
 

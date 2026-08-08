@@ -201,6 +201,10 @@ class BiwengerClient:
         return token
 
     # ---- endpoints de alto nivel -------------------------------------------
+    def get_account(self) -> Any:
+        """Cuenta del usuario: incluye sus ligas y, por liga, su user id y balance."""
+        return self.get_json(endpoints.account(), use_cache=False)
+
     def get_competition_data(self, score_name: str | None = None) -> Any:
         """Datos de todos los jugadores para un sistema de puntuación."""
         score = self.settings.score_id(score_name)

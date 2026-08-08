@@ -61,6 +61,20 @@ def test_rival_a_receives_sale_and_award():
     assert any("cesiones" in f for f in rival.flags)
 
 
+def test_exact_cash_overrides_estimate():
+    """Si conocemos el saldo real de un manager (el mío), se usa ese, no el estimado."""
+    res = parsed()
+    econ = reconstruct(
+        res.movements, res.round_results, team_values={501: 30_000_000},
+        initial_budget=40_000_000, factor=0.25,
+        exact_cash={501: 13_420_000},
+    )
+    me = next(e for e in econ if e.user_id == 501)
+    assert me.cash == 13_420_000                      # saldo exacto, no 21M estimado
+    assert me.max_bid == 13_420_000 + 7_500_000       # + 0.25 * 30M
+    assert any("EXACTO" in f for f in me.flags)
+
+
 def test_excluding_unknown_types_changes_cash():
     res = parsed()
     with_loans = reconstruct(res.movements, res.round_results, {502: 0},

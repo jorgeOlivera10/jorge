@@ -64,16 +64,20 @@ def reconstruct(
     factor: float = 0.25,
     user_names: dict[int, str] | None = None,
     starting_squad_cost: dict[int, int] | None = None,
+    exact_cash: dict[int, int] | None = None,
     include_unknown_types: bool = True,
 ) -> list[ManagerEconomy]:
     """Reconstruye la economía de todos los managers a partir del tablón.
 
     - team_values: {user_id: valor_de_equipo actual} (de standings).
+    - exact_cash: {user_id: saldo real} para managers cuyo balance conocemos
+      (p. ej. el tuyo, que la API sí expone). Sobrescribe la estimación.
     - include_unknown_types: si True, incluye cesiones/retos (tipos no estándar)
       en el saldo y añade un flag de aviso a los managers afectados.
     """
     user_names = user_names or {}
     starting_squad_cost = starting_squad_cost or {}
+    exact_cash = exact_cash or {}
 
     ids = _collect_user_ids(movements, round_results, team_values)
     money_in = {uid: 0 for uid in ids}
@@ -105,15 +109,21 @@ def reconstruct(
         m_in = money_in.get(uid, 0)
         m_out = money_out.get(uid, 0)
         aw = awards.get(uid, 0)
-        cash = initial_budget - start_cost + m_in + aw - m_out
+        estimated_cash = initial_budget - start_cost + m_in + aw - m_out
         tv = team_values.get(uid, 0)
-        max_bid = int(cash + factor * tv)
 
         flags: list[str] = []
-        if uid in unknown_involved:
-            flags.append("incluye cesiones/retos (tipo no estándar): estimación menos fiable")
+        if uid in exact_cash:
+            cash = exact_cash[uid]
+            flags.append("saldo EXACTO (de tu cuenta)")
+        else:
+            cash = estimated_cash
+            if uid in unknown_involved:
+                flags.append("incluye cesiones/retos (tipo no estándar): estimación menos fiable")
         if uid not in team_values:
             flags.append("sin valor de equipo (no aparece en standings)")
+
+        max_bid = int(cash + factor * tv)
 
         result.append(
             ManagerEconomy(

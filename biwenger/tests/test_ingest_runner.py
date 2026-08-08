@@ -27,6 +27,22 @@ class FakeClient:
         return load_fixture("competition_data_sample.json")
 
 
+class FakeClientWithAccount(FakeClient):
+    """Como FakeClient pero además expone /account con mi saldo real en la liga."""
+
+    def get_account(self):
+        return {
+            "status": 200,
+            "data": {
+                "account": {"id": 1596507},
+                "leagues": [
+                    {"id": 742220, "name": "Pain&Gain",
+                     "user": {"id": 501, "name": "Jorge", "balance": 13_420_000}},
+                ],
+            },
+        }
+
+
 def _settings(tmp_path) -> Settings:
     return Settings(
         user_id="501",
@@ -76,6 +92,17 @@ def test_ingest_computes_expected_cash_for_me(tmp_path):
     with session_scope(engine) as s:
         run_ingest(FakeClient(), settings, s, today=date(2026, 8, 8))
         ue = s.scalar(select(models.UserEconomy).where(models.UserEconomy.user_id == 501))
-        # cash = 40M + 1M prima - 20M fichajes = 21M ; max_bid = 21M + 0.25*30M = 28.5M
+        # Sin /account: cash estimado = 40M + 1M prima - 20M fichajes = 21M
         assert ue.cash == 21_000_000
         assert ue.max_bid == 28_500_000
+
+
+def test_ingest_uses_exact_balance_from_account(tmp_path):
+    settings = _settings(tmp_path)
+    engine = init_db(make_engine(settings))
+    with session_scope(engine) as s:
+        run_ingest(FakeClientWithAccount(), settings, s, today=date(2026, 8, 8))
+        ue = s.scalar(select(models.UserEconomy).where(models.UserEconomy.user_id == 501))
+        # Con /account: usa mi saldo EXACTO (13.42M), no la estimación.
+        assert ue.cash == 13_420_000
+        assert ue.max_bid == 13_420_000 + 7_500_000
