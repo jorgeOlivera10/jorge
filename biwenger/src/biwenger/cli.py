@@ -94,6 +94,138 @@ def init_db_cmd() -> None:
     console.print(f"[green]✓ Base de datos lista:[/] {s.resolved_database_url()}")
 
 
+def _money(n: float | int | None) -> str:
+    if n is None:
+        return "—"
+    return f"€{n:,.0f}"
+
+
+@app.command()
+def ingest() -> None:
+    """Ingesta diaria: tablón + liga, reconstruye economía y Pain tracker (idempotente)."""
+    from biwenger.db.session import init_db, session_scope
+    from biwenger.ingest.runner import run_ingest
+
+    s = get_settings()
+    if not s.user_id or not s.league_id:
+        console.print("[red]Faltan X-User / X-League en .env.[/] Ejecuta 'biwenger config'.")
+        raise typer.Exit(code=1)
+
+    client = BiwengerClient(s)
+    try:
+        client.login()
+    except BiwengerAPIError as exc:
+        console.print(f"[red]✗ Login: {exc}[/]")
+        raise typer.Exit(code=1)
+
+    engine = init_db()
+    with session_scope(engine) as session:
+        summary = run_ingest(client, s, session)
+    client.close()
+
+    console.print(
+        f"[green]✓ Ingesta OK[/] — {summary['movements_new']} movimientos nuevos "
+        f"(de {summary['movements_total']}), {summary['managers']} managers."
+    )
+    if summary["unknown_types"]:
+        console.print(
+            f"[yellow]⚠ Tipos de movimiento no reconocidos (posibles cesiones/retos):[/] "
+            f"{summary['unknown_types']} — incluidos en el saldo como estimación."
+        )
+    _print_economy(summary["economy"])
+
+
+def _print_economy(economies) -> None:
+    table = Table(title="Economía estimada por manager")
+    table.add_column("Manager", style="cyan")
+    table.add_column("Saldo", justify="right")
+    table.add_column("Valor equipo", justify="right")
+    table.add_column("Puja máx.", justify="right", style="bold")
+    table.add_column("Total", justify="right")
+    table.add_column("Avisos")
+    for e in economies:
+        table.add_row(
+            e.name or str(e.user_id),
+            _money(e.cash),
+            _money(e.team_value),
+            _money(e.max_bid),
+            _money(e.cash + e.team_value),
+            "; ".join(e.flags) if e.flags else "",
+        )
+    console.print(table)
+    console.print(
+        "[dim]Puja máxima = saldo + 0.25 × valor de equipo. ESTIMACIÓN: ver README "
+        "(primas, cesiones, liquidez guardada).[/]"
+    )
+
+
+@app.command()
+def economy() -> None:
+    """Muestra la última economía estimada guardada en la BD."""
+    from sqlalchemy import select
+    from biwenger.db import models
+    from biwenger.db.session import make_engine, session_scope
+
+    with session_scope(make_engine()) as session:
+        last_date = session.scalar(select(models.UserEconomy.date).order_by(models.UserEconomy.date.desc()))
+        if last_date is None:
+            console.print("[yellow]No hay datos. Ejecuta 'biwenger ingest' primero.[/]")
+            return
+        rows = session.execute(
+            select(models.UserEconomy, models.User.name)
+            .join(models.User, models.User.id == models.UserEconomy.user_id, isouter=True)
+            .where(models.UserEconomy.date == last_date)
+        ).all()
+
+    class _E:  # adaptador ligero para reutilizar _print_economy
+        def __init__(self, ue, name):
+            self.user_id, self.name = ue.user_id, name
+            self.cash, self.team_value, self.max_bid = ue.cash, ue.team_value, ue.max_bid
+            self.flags = []
+
+    economies = sorted((_E(ue, name) for ue, name in rows), key=lambda e: e.cash + e.team_value, reverse=True)
+    console.print(f"[dim]Snapshot: {last_date}[/]")
+    _print_economy(economies)
+
+
+@app.command()
+def pain() -> None:
+    """Muestra el marcador de dinero REAL (Pain tracker) desde la BD."""
+    from collections import defaultdict
+    from sqlalchemy import select
+    from biwenger.db import models
+    from biwenger.db.session import make_engine, session_scope
+
+    with session_scope(make_engine()) as session:
+        rows = session.execute(
+            select(models.RealMoneyLedger, models.User.name)
+            .join(models.User, models.User.id == models.RealMoneyLedger.user_id, isouter=True)
+        ).all()
+
+    if not rows:
+        console.print("[yellow]No hay datos de jornadas. Ejecuta 'biwenger ingest' primero.[/]")
+        return
+
+    pen: dict[int, float] = defaultdict(float)
+    resets: dict[int, int] = defaultdict(int)
+    names: dict[int, str] = {}
+    for led, name in rows:
+        names[led.user_id] = name or str(led.user_id)
+        if led.concept == "penalty":
+            pen[led.user_id] += led.amount_eur
+        elif led.concept == "deposit_reset":
+            resets[led.user_id] += 1
+
+    table = Table(title="Pain tracker — dinero REAL (€)")
+    table.add_column("Manager", style="cyan")
+    table.add_column("Pérdidas €", justify="right", style="bold red")
+    table.add_column("Re-fianzas (regla 15)", justify="right")
+    for uid in sorted(pen, key=lambda u: pen[u], reverse=True):
+        table.add_row(names[uid], f"{pen[uid]:.0f} €", str(resets.get(uid, 0)))
+    console.print(table)
+    console.print("[dim]Castigo por jornada: último 3€, penúltimo 2€, antepenúltimo 1€.[/]")
+
+
 @app.command()
 def verify(
     login: bool = typer.Option(

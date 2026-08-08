@@ -17,8 +17,8 @@ a quién fichar y por cuánto pujar**, con detección de chollos.
 |------|-----------|--------|
 | 1 | Esqueleto, config (.env), módulo de endpoints, CLI base | ✅ hecho |
 | 2 | Cliente de API (login, token, cabeceras, reintentos, throttle, caché) + `verify` | ✅ hecho |
-| 3 | Base de datos (SQLite/SQLAlchemy) + ingesta (jugadores, mercado, plantillas, tablón) | ⏳ |
-| 4 | Motor económico (saldo, puja máxima) + tests | ⏳ |
+| 3 | Base de datos (SQLite/SQLAlchemy) + ingesta idempotente (tablón, liga, jugadores) | ✅ hecho |
+| 4 | Motor económico (saldo, puja máxima) + Pain tracker (€ real) + tests | ✅ hecho |
 | 5 | Recomendaciones (puntos esperados, chollos, puja) | ⏳ |
 | 6 | Job diario idempotente + informe | ⏳ |
 | — | Dashboard opcional en Streamlit | preparado, sin implementar |
@@ -88,6 +88,10 @@ De momento (Fase 1):
 | `biwenger version` | Muestra la versión de la herramienta. |
 | `biwenger config`  | Muestra la configuración cargada y qué falta en `.env`. |
 | `biwenger verify`  | Llamada **real** al endpoint público de LaLiga para verificar/ajustar los IDs de `score`. Añade `--login` para probar también las credenciales. |
+| `biwenger init-db` | Crea la base de datos SQLite y su esquema (idempotente). |
+| `biwenger ingest`  | **Ingesta diaria**: login → tablón completo + standings, reconstruye la economía de cada manager y el Pain tracker, y guarda todo en la BD. Idempotente (solo añade lo nuevo). |
+| `biwenger economy` | Muestra la última **economía estimada** por manager: saldo, valor de equipo, **puja máxima** y total. |
+| `biwenger pain`    | Muestra el **Pain tracker**: marcador de dinero **real** (€) por manager según los castigos de jornada. |
 
 Se irán documentando aquí `ingest`, `economy`, `recommend` y `daily` a medida que
 se implementen.
