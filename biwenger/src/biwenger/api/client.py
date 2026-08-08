@@ -214,10 +214,36 @@ class BiwengerClient:
         return self.get_json(endpoints.market_daily(), use_cache=False)
 
     def get_league(self) -> Any:
-        return self.get_json(endpoints.league(self.settings.league_id))
+        """Liga activa (según cabecera X-League): standings y managers."""
+        return self.get_json(endpoints.league(), use_cache=False)
 
-    def get_board(self, offset: int = 0, limit: int = 50) -> Any:
+    def get_rounds_league(self) -> Any:
+        """Clasificación por jornada (puntos de cada plantilla por ronda)."""
+        return self.get_json(endpoints.rounds_league(), use_cache=False)
+
+    def get_user_team(self, user_id: str) -> Any:
+        """Equipo de un manager (players con owner.price, lineups, offers...)."""
+        return self.get_json(endpoints.user_team(user_id), use_cache=False)
+
+    def get_my_market(self) -> Any:
+        """Mercado/ofertas del usuario autenticado."""
+        return self.get_json(endpoints.my_market(), use_cache=False)
+
+    def get_board(self, offset: int = 0, limit: int = 500) -> Any:
+        """Una página del tablón de movimientos."""
         return self.get_json(
             endpoints.league_board(self.settings.league_id, offset, limit),
             use_cache=False,
         )
+
+    def get_full_board(self, page_size: int = 500, max_pages: int = 20) -> list[Any]:
+        """Tablón COMPLETO desde el inicio, paginando hasta agotar movimientos."""
+        movements: list[Any] = []
+        for page in range(max_pages):
+            batch = self.get_board(offset=page * page_size, limit=page_size)
+            if not batch:
+                break
+            movements.extend(batch)
+            if len(batch) < page_size:
+                break
+        return movements
