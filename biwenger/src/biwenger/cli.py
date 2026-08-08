@@ -84,6 +84,16 @@ def config() -> None:
         console.print("\n[green]✓ Configuración completa.[/]")
 
 
+@app.command(name="init-db")
+def init_db_cmd() -> None:
+    """Crea la base de datos y su esquema (idempotente)."""
+    from biwenger.db.session import init_db
+
+    s = get_settings()
+    init_db()
+    console.print(f"[green]✓ Base de datos lista:[/] {s.resolved_database_url()}")
+
+
 @app.command()
 def verify(
     login: bool = typer.Option(
