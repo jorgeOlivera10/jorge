@@ -109,12 +109,21 @@ def run_daily(
     reports_dir = reports_dir or (PROJECT_ROOT / "reports")
     reports_dir.mkdir(parents=True, exist_ok=True)
 
+    from biwenger.webreport import build_dashboard_html, load_dashboard_data
+
     with session_scope(engine) as session:
         summary = run_ingest(client, settings, session, today=today)
         chollos = _load_chollos_from_db(session)
+        dashboard_html = build_dashboard_html(load_dashboard_data(session, settings.league_name))
 
     report = build_report(summary, chollos)
     path = reports_dir / f"{today.isoformat()}.md"
     path.write_text(report, encoding="utf-8")
-    log.info("Informe del día escrito en %s", path)
+
+    # Dashboard HTML autocontenido (para verlo en cualquier navegador / móvil).
+    html_path = reports_dir / "dashboard.html"
+    html_path.write_text(dashboard_html, encoding="utf-8")
+    summary["html_path"] = str(html_path)
+
+    log.info("Informe del día en %s ; dashboard en %s", path, html_path)
     return path, summary

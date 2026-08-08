@@ -593,6 +593,35 @@ def daily() -> None:
         f"[green]✓ Informe del día:[/] {path}  "
         f"([cyan]{summary['movements_new']}[/] movimientos nuevos)"
     )
+    console.print(f"[green]✓ Dashboard HTML:[/] {summary.get('html_path', '—')}")
+
+
+@app.command()
+def html(
+    open_browser: bool = typer.Option(True, "--open/--no-open", help="Abrir en el navegador al terminar."),
+) -> None:
+    """Genera un dashboard HTML autocontenido (dashboard.html) para ver en cualquier sitio."""
+    import webbrowser
+    from biwenger.config import PROJECT_ROOT
+    from biwenger.db.session import make_engine, session_scope
+    from biwenger.webreport import build_dashboard_html, load_dashboard_data
+
+    s = get_settings()
+    out = PROJECT_ROOT / "reports" / "dashboard.html"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with session_scope(make_engine(s)) as session:
+        data = load_dashboard_data(session, s.league_name)
+    if not data["economy"]:
+        console.print("[yellow]No hay datos. Ejecuta 'biwenger daily' primero.[/]")
+        raise typer.Exit(code=1)
+    out.write_text(build_dashboard_html(data), encoding="utf-8")
+    console.print(f"[green]✓ Dashboard generado:[/] {out}")
+    console.print("[dim]Ábrelo con doble clic, o envíatelo al móvil (WhatsApp/Drive) para verlo donde sea.[/]")
+    if open_browser:
+        try:
+            webbrowser.open(out.as_uri())
+        except Exception:  # noqa: BLE001
+            pass
 
 
 @app.command()

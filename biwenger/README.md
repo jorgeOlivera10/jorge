@@ -101,7 +101,8 @@ De momento (Fase 1):
 | `biwenger alerts` | Solo tus jugadores con **lesión/duda/sanción o noticia** → señales de venta inmediata. |
 | `biwenger market` | Jugadores en el **mercado de la banca** hoy, con **estado, si es titular, noticia**, valor y **puja sugerida**. `--no-bank-only` para incluir los de rivales; `--no-scout` para no descargar fichas. |
 | `biwenger recommend` | **Chollos** (mejor relación puntos/precio) y **sugerencia de puja**. Opciones: `--top N`, `--max-price`, `--position 1..4`, `--min-games`, y `--player <id>` para una sugerencia de puja concreta (cruza tu puja máxima con el techo de tus rivales). |
-| `biwenger daily`   | **Job diario**: login → ingesta idempotente → deja un **informe** fechado en `reports/AAAA-MM-DD.md`. |
+| `biwenger daily`   | **Job diario**: login → ingesta idempotente → deja un **informe** en `reports/AAAA-MM-DD.md` y un **dashboard HTML** en `reports/dashboard.html`. |
+| `biwenger html`    | Genera `reports/dashboard.html` (un **único archivo**, sin servidor) y lo abre. Ábrelo con doble clic o envíatelo al móvil para verlo en cualquier sitio. |
 
 ### Automatizar el job diario
 
@@ -150,9 +151,19 @@ Network URL: http://192.168.x.x:8501   ← ábrela en el MÓVIL
 > El dashboard muestra lo último que ingirió `biwenger daily`; ejecútalo para
 > refrescar los datos (o programa el job diario). Botón "🔄 Recargar" para releer la BD.
 
-Para verlo **desde cualquier sitio** (no solo en casa) tienes dos opciones: dejar el PC
-encendido y exponer el puerto, o desplegarlo gratis en **Streamlit Community Cloud**
-(requiere que el job diario también corra en la nube; pregúntame y te lo monto).
+### Verlo en cualquier sitio (lo más fácil)
+
+En vez del servidor Streamlit, `biwenger daily` (o `biwenger html`) genera un
+**único archivo** `reports/dashboard.html`, sin servidor ni instalación:
+
+- **En el PC:** doble clic → se abre en el navegador.
+- **En el móvil, desde cualquier sitio:** guarda ese `dashboard.html` en tu
+  **Google Drive / iCloud** (o mándatelo por WhatsApp/Telegram) y ábrelo en el
+  móvil. Es privado (solo tú lo tienes) y funciona sin PC encendido.
+- **Siempre online y automático (sin tocar nada):** un **GitHub Action** puede
+  ejecutar el job cada día y publicar el dashboard en **GitHub Pages** (URL fija
+  para el móvil). Ojo: Pages es **público**; pregúntame y te lo monto (o te dejo
+  una variante privada).
 
 ## Sistemas de puntuación
 
