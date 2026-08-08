@@ -50,12 +50,13 @@ def _detect_me(client: Any, settings: Any) -> tuple[int | None, int | None]:
     return fallback, None
 
 
-def _capture_initial_squad_costs(client: Any, session: Session, standings: list[dict]) -> dict[int, int]:
-    """Devuelve {user_id: coste_plantilla_inicial}, capturándolo una sola vez.
+def _ingest_squads(client: Any, session: Session, standings: list[dict], today: date) -> dict[int, int]:
+    """Ingiere las plantillas ACTUALES de todos los managers y devuelve el coste
+    de la plantilla INICIAL de cada uno (capturado una sola vez).
 
-    Si un manager ya tiene el coste guardado, se reutiliza (no se vuelve a pedir
-    su plantilla). Si no, y el cliente lo soporta, se pide su equipo y se suma el
-    precio de compra (owner.price) de cada jugador.
+    - Guarda una foto de la plantilla del día (para 'biwenger squads').
+    - La primera vez, fija User.initial_squad_cost = Σ owner.price (saldo de
+      partida = 40M − ese coste). Luego no lo recalcula.
     """
     costs: dict[int, int] = {}
     can_fetch = hasattr(client, "get_user_team")
@@ -64,10 +65,13 @@ def _capture_initial_squad_costs(client: Any, session: Session, standings: list[
         user = session.get(models.User, uid)
         if user is None:
             continue
-        if user.initial_squad_cost is None and can_fetch:
+        if can_fetch:
             try:
                 team = parse_user_team(client.get_user_team(str(uid)))
-                user.initial_squad_cost = sum((p.get("buy_price") or 0) for p in team["squad"])
+                squad = team["squad"]
+                store.store_squad(session, today, uid, squad)
+                if user.initial_squad_cost is None:
+                    user.initial_squad_cost = sum((p.get("buy_price") or 0) for p in squad)
             except Exception as exc:  # noqa: BLE001 - degradamos con seguridad
                 log.warning("No se pudo leer la plantilla de %s: %s", uid, exc)
         if user.initial_squad_cost is not None:
@@ -117,7 +121,7 @@ def run_ingest(client: Any, settings: Any, session: Session, *, today: date | No
     #     40M − plantilla aleatoria). Se captura UNA vez (al inicio de la liga)
     #     y se guarda; en ingestas posteriores no se vuelve a pedir. Con esto el
     #     saldo estimado de los rivales parte de su caja real, no de 40M enteros.
-    starting_squad_cost = _capture_initial_squad_costs(client, session, standings)
+    starting_squad_cost = _ingest_squads(client, session, standings, today)
 
     # 4) Motor económico.
     economies = reconstruct(

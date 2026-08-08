@@ -122,16 +122,18 @@ def test_initial_squad_cost_makes_rival_cash_realistic(tmp_path):
         # Rival B (503): 40M − 20M plantilla + 0.3M (cesión cobrada) = 20.3M
         ue = s.scalar(select(models.UserEconomy).where(models.UserEconomy.user_id == 503))
         assert ue.cash == 20_300_000
-        # el coste inicial se guardó
+        # el coste inicial se guardó y la plantilla también
         assert s.get(models.User, 503).initial_squad_cost == 20_000_000
+        assert s.scalar(select(func.count()).select_from(models.UserSquad)) == 3  # 1 jugador x 3 managers
 
-    calls_after_first = client.team_calls
-    assert calls_after_first == 3   # una por manager
+    assert client.team_calls == 3   # una por manager en la 1ª pasada
 
-    # Segunda pasada: no vuelve a pedir plantillas (coste ya guardado).
+    # Segunda pasada: refresca plantillas (para poder listarlas al día), pero el
+    # coste INICIAL no se recalcula.
     with session_scope(engine) as s:
         run_ingest(client, settings, s, today=date(2026, 8, 9))
-    assert client.team_calls == calls_after_first   # sin nuevas llamadas
+        assert s.get(models.User, 503).initial_squad_cost == 20_000_000  # inalterado
+    assert client.team_calls == 6   # vuelve a pedir plantillas (foto del día)
 
 
 def test_ingest_uses_exact_balance_from_account(tmp_path):

@@ -96,6 +96,8 @@ De momento (Fase 1):
 | `biwenger ingest`  | **Ingesta diaria**: login → tablón completo + standings, reconstruye la economía de cada manager y el Pain tracker, y guarda todo en la BD. Idempotente (solo añade lo nuevo). |
 | `biwenger economy` | Muestra la última **economía estimada** por manager: saldo, valor de equipo, **puja máxima** y total. |
 | `biwenger pain`    | Muestra el **Pain tracker**: marcador de dinero **real** (€) por manager según los castigos de jornada. |
+| `biwenger squads` | Lista las **plantillas** de los managers (jugador, posición, equipo, valor y lo que pagó). `--user <nombre>` para uno solo. |
+| `biwenger market` | Jugadores en el **mercado hoy**, ordenados por relación puntos/precio, con **puja sugerida**. |
 | `biwenger recommend` | **Chollos** (mejor relación puntos/precio) y **sugerencia de puja**. Opciones: `--top N`, `--max-price`, `--position 1..4`, `--min-games`, y `--player <id>` para una sugerencia de puja concreta (cruza tu puja máxima con el techo de tus rivales). |
 | `biwenger daily`   | **Job diario**: login → ingesta idempotente → deja un **informe** fechado en `reports/AAAA-MM-DD.md`. |
 

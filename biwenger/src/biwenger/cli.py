@@ -227,6 +227,141 @@ def pain() -> None:
 
 
 @app.command()
+def squads(
+    user: str = typer.Option("", help="Nombre (o parte) del manager. Vacío = todos."),
+) -> None:
+    """Lista las plantillas de los managers (última foto guardada)."""
+    from sqlalchemy import select
+    from biwenger.db import models
+    from biwenger.db.session import make_engine, session_scope
+
+    with session_scope(make_engine()) as session:
+        last_date = session.scalar(select(models.UserSquad.date).order_by(models.UserSquad.date.desc()))
+        if last_date is None:
+            console.print("[yellow]No hay plantillas. Ejecuta 'biwenger daily' primero.[/]")
+            return
+        rows = session.execute(
+            select(models.UserSquad, models.User.name, models.Player)
+            .join(models.User, models.User.id == models.UserSquad.user_id, isouter=True)
+            .join(models.Player, models.Player.id == models.UserSquad.player_id, isouter=True)
+            .where(models.UserSquad.date == last_date)
+        ).all()
+
+    # Agrupa por manager
+    from collections import defaultdict
+    by_user: dict[str, list] = defaultdict(list)
+    for sq, uname, player in rows:
+        by_user[uname or str(sq.user_id)].append((sq, player))
+
+    names = [n for n in by_user if not user or user.lower() in n.lower()]
+    if not names:
+        console.print(f"[yellow]Ningún manager coincide con '{user}'.[/]")
+        return
+
+    for name in sorted(names):
+        squad = by_user[name]
+        total = sum((p.price or 0) for _, p in squad if p)
+        paid = sum((sq.buy_price or 0) for sq, _ in squad)
+        table = Table(title=f"{name}  ·  valor €{total:,.0f}  ·  pagado €{paid:,.0f}")
+        table.add_column("Jugador", style="cyan")
+        table.add_column("Pos", justify="center")
+        table.add_column("Equipo")
+        table.add_column("Valor", justify="right")
+        table.add_column("Pagó", justify="right")
+        POS = {1: "PT", 2: "DF", 3: "MC", 4: "DL"}
+        for sq, p in sorted(squad, key=lambda x: (x[1].price or 0) if x[1] else 0, reverse=True):
+            if p is None:
+                table.add_row(str(sq.player_id), "?", "—", "—", _money(sq.buy_price))
+            else:
+                table.add_row(p.name or "—", POS.get(p.position or 0, "?"),
+                              p.team_name or "—", _money(p.price), _money(sq.buy_price))
+        console.print(table)
+
+
+@app.command()
+def market() -> None:
+    """Muestra los jugadores en el MERCADO hoy, con valor y sugerencia de puja."""
+    from sqlalchemy import select
+    from biwenger.analysis.expected import compute_player_value
+    from biwenger.analysis.recommend import RivalCeiling, suggest_bid
+    from biwenger.db import models
+    from biwenger.db.session import make_engine, session_scope
+
+    s = get_settings()
+    if not s.user_id or not s.league_id:
+        console.print("[red]Faltan X-User / X-League en .env.[/]")
+        raise typer.Exit(code=1)
+
+    client = BiwengerClient(s)
+    try:
+        client.login()
+        raw = client.get_my_market()
+    except BiwengerAPIError as exc:
+        console.print(f"[red]✗ {exc}[/]")
+        raise typer.Exit(code=1)
+    finally:
+        client.close()
+
+    from biwenger.ingest.market import parse_market
+    sales = parse_market(raw)
+    if not sales:
+        console.print("[yellow]No hay jugadores en el mercado ahora mismo (o la API cambió el formato).[/]")
+        return
+
+    # Enriquecemos con datos de la BD (rendimiento + economía para la puja).
+    with session_scope(make_engine()) as session:
+        players = {p.id: p for p in session.scalars(select(models.Player)).all()}
+        # nº de jornadas jugadas (proxy) para la fiabilidad
+        rounds_played = max((pl.played or 0) for pl in players.values()) or None
+        last_date = session.scalar(select(models.UserEconomy.date).order_by(models.UserEconomy.date.desc()))
+        my_max_bid, rivals = 0, []
+        if last_date is not None:
+            for ue, u in session.execute(
+                select(models.UserEconomy, models.User)
+                .join(models.User, models.User.id == models.UserEconomy.user_id, isouter=True)
+                .where(models.UserEconomy.date == last_date)
+            ).all():
+                if u is not None and u.is_me:
+                    my_max_bid = ue.max_bid
+                else:
+                    rivals.append(RivalCeiling(ue.user_id, u.name if u else None, ue.max_bid))
+        seller_names = {u.id: u.name for u in session.scalars(select(models.User)).all()}
+
+    rows = []
+    for sale in sales:
+        p = players.get(sale["player_id"])
+        if p is None:
+            continue
+        pv = compute_player_value(p, rounds_played)
+        rows.append((sale, p, pv))
+    rows.sort(key=lambda r: r[2].value_ratio, reverse=True)
+
+    table = Table(title="Mercado de hoy — ordenado por relación puntos/precio")
+    table.add_column("Jugador", style="cyan")
+    table.add_column("Pos", justify="center")
+    table.add_column("Precio", justify="right")
+    table.add_column("Vende", justify="left")
+    table.add_column("Pts/part.", justify="right")
+    table.add_column("Valor", justify="right", style="bold green")
+    table.add_column("Puja sugerida", justify="right")
+    POS = {1: "PT", 2: "DF", 3: "MC", 4: "DL"}
+    for sale, p, pv in rows:
+        sug = suggest_bid(pv, my_max_bid, rivals) if my_max_bid else None
+        seller = "banca" if not sale["seller_id"] else seller_names.get(sale["seller_id"], "rival")
+        price = sale["price"] if sale["price"] is not None else p.price
+        table.add_row(
+            p.name or "—", POS.get(p.position or 0, "?"), _money(price), str(seller),
+            str(pv.points_per_match), str(pv.value_ratio),
+            _money(sug.suggested_bid) if sug else "—",
+        )
+    console.print(table)
+    console.print(
+        "[dim]Valor = puntos esperados por millón. 'Puja sugerida' = mercado +15%, "
+        "limitada por tu puja máxima. Al inicio de liga aún no hay puntos.[/]"
+    )
+
+
+@app.command()
 def recommend(
     top: int = typer.Option(15, help="Número de chollos a mostrar."),
     max_price: int = typer.Option(0, help="Precio máximo (0 = sin límite)."),
