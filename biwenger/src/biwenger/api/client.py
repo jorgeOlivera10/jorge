@@ -124,6 +124,13 @@ class BiwengerClient:
         h: dict[str, str] = {
             "Content-Type": "application/json",
             "Accept": "application/json",
+            # User-Agent de navegador: algunos endpoints rechazan clientes no-navegador.
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Referer": "https://biwenger.as.com/",
+            "Origin": "https://biwenger.as.com",
         }
         if self._token:
             h["Authorization"] = f"Bearer {self._token}"

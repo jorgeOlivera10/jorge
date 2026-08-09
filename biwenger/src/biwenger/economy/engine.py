@@ -1,20 +1,22 @@
-"""Motor económico: reconstrucción del saldo y la puja máxima de cada manager.
+"""Motor económico: estima el saldo y la puja máxima de cada manager.
 
-⚠️  TODO lo que produce este módulo es una ESTIMACIÓN. Se reconstruye a partir
-    del tablón de movimientos, con estos supuestos y fuentes de error conocidas:
-      - Presupuesto inicial igual para todos (config BIWENGER_INITIAL_BUDGET).
-      - Valor de la plantilla INICIAL: si no se aporta, se asume 0 (managers que
-        empezaron sin plantilla comprada). Si tu liga arrancó con draft, pásalo.
-      - CESIONES y RETOS: se tratan como transferencias de dinero entre managers
-        (quien cede/gana cobra; quien recibe/paga, paga). La API puede exponerlos
-        con un 'type' propio; por eso se marcan como estimación (ver 'flags').
-      - No se modelan cláusulas ni salarios (esta liga no los usa por defecto).
+⚠️  Todo es una ESTIMACIÓN salvo mi propio saldo (que la API expone exacto).
 
-Fórmula (confirmada con proyectos reales y tu normativa):
-    cash    = presupuesto_inicial − coste_plantilla_inicial
-              + entradas(ventas, primas, cesiones cobradas)
-              − salidas(fichajes, cesiones pagadas)
-    max_bid = cash + factor * valor_de_equipo          (factor = 0.25)
+Modelo (identidad de patrimonio neto):
+    patrimonio = saldo + valor_de_equipo = presupuesto_inicial + primas + ganancias
+Al inicio de la liga cada manager recibe `presupuesto_inicial` (40M) y una
+plantilla aleatoria; su patrimonio de partida es 40M, así que:
+
+    saldo ≈ presupuesto_inicial − valor_de_equipo + primas + flujos_de_cesiones
+
+Fuentes de error conocidas: la apreciación/depreciación del valor de la plantilla
+frente a su coste real, las ganancias/pérdidas realizadas en ventas (que no
+modelamos con precisión sin el coste de compra del draft), salarios/cláusulas
+(esta liga no los usa) y managers que guardan liquidez. Mi saldo es exacto
+porque la API lo da; el de los rivales es estimado.
+
+Puja máxima:
+    puja_maxima = saldo + factor * valor_de_equipo        (factor = 0.25)
 """
 
 from __future__ import annotations
@@ -23,20 +25,20 @@ from dataclasses import dataclass, field
 
 from biwenger.ingest.board import ParsedMovement, ParsedRoundResult
 
+# Tipos de movimiento de compraventa (ya reflejados en el valor de equipo).
+_TRANSFER_TYPES = {"transfer", "adminTransfer", "market"}
+
 
 @dataclass
 class ManagerEconomy:
     user_id: int
     name: str | None
-    initial_budget: int
-    starting_squad_cost: int
-    money_in: int          # ventas + cesiones cobradas
-    money_out: int         # fichajes + cesiones pagadas
-    awards: int            # primas (roundFinished bonus)
-    cash: int              # saldo estimado
+    cash: int              # saldo estimado (o exacto para mí)
     team_value: int
+    awards: int            # primas acumuladas (roundFinished)
     max_bid: int
-    flags: list[str] = field(default_factory=list)  # avisos (p. ej. cesiones incluidas)
+    is_exact: bool = False
+    flags: list[str] = field(default_factory=list)
 
 
 def _collect_user_ids(
@@ -63,80 +65,71 @@ def reconstruct(
     initial_budget: int,
     factor: float = 0.25,
     user_names: dict[int, str] | None = None,
-    starting_squad_cost: dict[int, int] | None = None,
     exact_cash: dict[int, int] | None = None,
     include_unknown_types: bool = True,
 ) -> list[ManagerEconomy]:
-    """Reconstruye la economía de todos los managers a partir del tablón.
+    """Estima la economía de todos los managers.
 
-    - team_values: {user_id: valor_de_equipo actual} (de standings).
-    - exact_cash: {user_id: saldo real} para managers cuyo balance conocemos
-      (p. ej. el tuyo, que la API sí expone). Sobrescribe la estimación.
-    - include_unknown_types: si True, incluye cesiones/retos (tipos no estándar)
-      en el saldo y añade un flag de aviso a los managers afectados.
+    - team_values: {user_id: valor_de_equipo} (de standings).
+    - exact_cash: {user_id: saldo real} para managers cuyo balance conocemos (yo).
+    - include_unknown_types: si True, suma/resta los flujos de cesiones/retos
+      (movimientos de tipo no estándar) al saldo.
     """
     user_names = user_names or {}
-    starting_squad_cost = starting_squad_cost or {}
     exact_cash = exact_cash or {}
 
     ids = _collect_user_ids(movements, round_results, team_values)
-    money_in = {uid: 0 for uid in ids}
-    money_out = {uid: 0 for uid in ids}
-    awards = {uid: 0 for uid in ids}
-    unknown_involved: set[int] = set()
 
-    for m in movements:
-        is_unknown = m.note is not None
-        if is_unknown and not include_unknown_types:
-            continue
-        amount = m.amount or 0
-        if m.from_user_id is not None:
-            money_in[m.from_user_id] = money_in.get(m.from_user_id, 0) + amount
-            if is_unknown:
-                unknown_involved.add(m.from_user_id)
-        if m.to_user_id is not None:
-            money_out[m.to_user_id] = money_out.get(m.to_user_id, 0) + amount
-            if is_unknown:
-                unknown_involved.add(m.to_user_id)
-
+    # Primas (roundFinished bonus) por manager.
+    awards: dict[int, int] = {uid: 0 for uid in ids}
     for r in round_results:
         if r.bonus:
             awards[r.user_id] = awards.get(r.user_id, 0) + r.bonus
 
+    # Flujos especiales (cesiones/retos): tipos NO de compraventa. Estos mueven
+    # dinero sin cambiar el valor de equipo, así que sí afectan al saldo.
+    special: dict[int, int] = {uid: 0 for uid in ids}
+    special_involved: set[int] = set()
+    if include_unknown_types:
+        for m in movements:
+            if m.type in _TRANSFER_TYPES:
+                continue
+            amount = m.amount or 0
+            if m.from_user_id is not None:
+                special[m.from_user_id] = special.get(m.from_user_id, 0) + amount
+                special_involved.add(m.from_user_id)
+            if m.to_user_id is not None:
+                special[m.to_user_id] = special.get(m.to_user_id, 0) - amount
+                special_involved.add(m.to_user_id)
+
     result: list[ManagerEconomy] = []
     for uid in ids:
-        start_cost = starting_squad_cost.get(uid, 0)
-        m_in = money_in.get(uid, 0)
-        m_out = money_out.get(uid, 0)
-        aw = awards.get(uid, 0)
-        estimated_cash = initial_budget - start_cost + m_in + aw - m_out
         tv = team_values.get(uid, 0)
-
+        aw = awards.get(uid, 0)
         flags: list[str] = []
+
         if uid in exact_cash:
             cash = exact_cash[uid]
+            is_exact = True
             flags.append("saldo EXACTO (de tu cuenta)")
         else:
-            cash = estimated_cash
-            if uid in unknown_involved:
-                flags.append("incluye cesiones/retos (tipo no estándar): estimación menos fiable")
-        if uid not in team_values:
-            flags.append("sin valor de equipo (no aparece en standings)")
+            cash = initial_budget - tv + aw + special.get(uid, 0)
+            is_exact = False
+            if uid in special_involved:
+                flags.append("incluye cesiones/retos")
+            if uid not in team_values:
+                flags.append("sin valor de equipo (no aparece en standings)")
 
         max_bid = int(cash + factor * tv)
-
         result.append(
             ManagerEconomy(
                 user_id=uid,
                 name=user_names.get(uid),
-                initial_budget=initial_budget,
-                starting_squad_cost=start_cost,
-                money_in=m_in,
-                money_out=m_out,
-                awards=aw,
                 cash=cash,
                 team_value=tv,
+                awards=aw,
                 max_bid=max_bid,
+                is_exact=is_exact,
                 flags=flags,
             )
         )

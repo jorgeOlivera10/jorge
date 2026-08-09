@@ -119,13 +119,12 @@ def run_ingest(client: Any, settings: Any, session: Session, *, today: date | No
     n_new = store.store_movements(session, parsed.movements)
     store.store_round_standings(session, parsed.round_results)
 
-    # 3b) Coste de la plantilla INICIAL de cada manager (saldo de partida =
-    #     40M − plantilla aleatoria). Se captura UNA vez (al inicio de la liga)
-    #     y se guarda; en ingestas posteriores no se vuelve a pedir. Con esto el
-    #     saldo estimado de los rivales parte de su caja real, no de 40M enteros.
-    starting_squad_cost = _ingest_squads(client, session, standings, today)
+    # 3b) Guardar la plantilla actual de cada manager (para las pestañas de
+    #     equipos). No se usa para la economía: el saldo se estima como
+    #     40M − valor_de_equipo (+ primas + cesiones), ver economy/engine.py.
+    _ingest_squads(client, session, standings, today)
 
-    # 4) Motor económico.
+    # 4) Motor económico (saldo = 40M − valor equipo + primas; mi saldo, exacto).
     economies = reconstruct(
         parsed.movements,
         parsed.round_results,
@@ -133,7 +132,6 @@ def run_ingest(client: Any, settings: Any, session: Session, *, today: date | No
         initial_budget=settings.initial_budget,
         factor=settings.bid_team_value_factor,
         user_names=user_names,
-        starting_squad_cost=starting_squad_cost,
         exact_cash=exact_cash,
     )
     store.store_user_economy(session, today, economies)
