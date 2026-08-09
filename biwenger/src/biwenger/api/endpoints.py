@@ -41,10 +41,13 @@ def account() -> str:
     return f"{AS_BASE}/account"
 
 
-# --- Datos públicos de competición / jugadores (base cf.biwenger.com, SIN cabeceras) ---
+# --- Datos de competición / jugadores ---
+# IMPORTANTE: usamos la base biwenger.as.com (NO cf.biwenger.com). cf.biwenger.com
+# está detrás de Cloudflare y devuelve 403 a IPs de datacenter (p. ej. GitHub
+# Actions). as.com sirve los mismos datos y responde con las cabeceras de auth.
 def competition_data(score: int, lang: str = "en") -> str:
     """GET de TODOS los jugadores de LaLiga para un sistema de puntuación dado."""
-    return f"{CF_BASE}/competitions/{COMPETITION}/data?lang={lang}&score={score}"
+    return f"{AS_BASE}/competitions/{COMPETITION}/data?lang={lang}&score={score}"
 
 
 def player_detail(alias: str, score: int, lang: str = "en") -> str:
@@ -58,7 +61,7 @@ def player_detail(alias: str, score: int, lang: str = "en") -> str:
       - seasons, news, team, partner (enlace a Sofascore en partner['2']['url']).
     """
     fields = f"*,team,fitness,{_PLAYER_REPORT_FIELDS},prices,competition,seasons,news,partner"
-    return f"{CF_BASE}/players/{COMPETITION}/{alias}?fields={fields}&score={score}&lang={lang}"
+    return f"{AS_BASE}/players/{COMPETITION}/{alias}?fields={fields}&score={score}&lang={lang}"
 
 
 # --- Endpoints de liga (base biwenger.as.com, REQUIEREN cabeceras) ---
@@ -104,5 +107,5 @@ def my_market() -> str:
 
 
 def market_daily() -> str:
-    """GET del mercado diario público con valores incluidos."""
-    return f"{CF_BASE}/competitions/{COMPETITION}/market?interval=day&includeValues=true"
+    """GET del mercado diario con valores incluidos."""
+    return f"{AS_BASE}/competitions/{COMPETITION}/market?interval=day&includeValues=true"

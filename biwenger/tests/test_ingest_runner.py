@@ -107,33 +107,25 @@ def test_ingest_computes_expected_cash_for_me(tmp_path):
     with session_scope(engine) as s:
         run_ingest(FakeClient(), settings, s, today=date(2026, 8, 8))
         ue = s.scalar(select(models.UserEconomy).where(models.UserEconomy.user_id == 501))
-        # Sin /account: cash estimado = 40M + 1M prima - 20M fichajes = 21M
-        assert ue.cash == 21_000_000
-        assert ue.max_bid == 28_500_000
+        # Sin /account: cash estimado = 40M − 30M valor equipo + 1M prima = 11M
+        assert ue.cash == 11_000_000
+        assert ue.max_bid == 18_500_000
 
 
-def test_initial_squad_cost_makes_rival_cash_realistic(tmp_path):
+def test_rival_cash_is_budget_minus_team_value(tmp_path):
     settings = _settings(tmp_path)
     engine = init_db(make_engine(settings))
     client = FakeClientSquads()
 
     with session_scope(engine) as s:
         run_ingest(client, settings, s, today=date(2026, 8, 8))
-        # Rival B (503): 40M − 20M plantilla + 0.3M (cesión cobrada) = 20.3M
+        # Rival B (503): 40M − 10M (valor equipo de standings) + 0.3M cesión = 30.3M
         ue = s.scalar(select(models.UserEconomy).where(models.UserEconomy.user_id == 503))
-        assert ue.cash == 20_300_000
-        # el coste inicial se guardó y la plantilla también
-        assert s.get(models.User, 503).initial_squad_cost == 20_000_000
-        assert s.scalar(select(func.count()).select_from(models.UserSquad)) == 3  # 1 jugador x 3 managers
+        assert ue.cash == 30_300_000
+        # Las plantillas se guardan para las pestañas (1 jugador x 3 managers).
+        assert s.scalar(select(func.count()).select_from(models.UserSquad)) == 3
 
-    assert client.team_calls == 3   # una por manager en la 1ª pasada
-
-    # Segunda pasada: refresca plantillas (para poder listarlas al día), pero el
-    # coste INICIAL no se recalcula.
-    with session_scope(engine) as s:
-        run_ingest(client, settings, s, today=date(2026, 8, 9))
-        assert s.get(models.User, 503).initial_squad_cost == 20_000_000  # inalterado
-    assert client.team_calls == 6   # vuelve a pedir plantillas (foto del día)
+    assert client.team_calls == 3   # una plantilla por manager
 
 
 def test_ingest_uses_exact_balance_from_account(tmp_path):
