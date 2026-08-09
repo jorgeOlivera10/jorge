@@ -16,8 +16,9 @@
         "rawStats": { "minutesPlayed": 90 }, "star": true }
     ],
     "news": [
-      { "date": 1723200000, "title": "Duda por unas molestias", "content": "El delantero arrastra molestias." },
-      { "date": 1723100000, "title": "Entrenamiento parcial", "content": "Trabajó al margen." }
+      { "date": 1723200000, "title": "Lewandowski, duda por unas molestias", "content": "El delantero arrastra molestias." },
+      { "date": 1723100000, "title": "Lewandowski entrenó al margen", "content": "Trabajó al margen." },
+      { "date": 1723150000, "title": "Jugadores a elegir como Ariete: Jornada 1", "content": "Noticia general del blog." }
     ],
     "seasons": [
       { "id": "2024", "name": "Temporada 2024/2025", "points": 220, "games": 36 },

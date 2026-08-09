@@ -134,7 +134,7 @@ def _outlook_dict(o) -> dict:
         "¿Juega?": o.will_play,
         "Esperado": o.expected_ppg if o.expected_ppg is not None else None,
         "Precio": o.price, "Tendencia": o.price_increment,
-        "Vender": "🔴 VENDER" if o.sell_now else "", "Noticia": o.news_title or "",
+        "Vender": "🔴 VENDER" if o.sell_now else "", "Nota": o.note,
     }
 
 
