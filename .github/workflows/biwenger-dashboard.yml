@@ -37,16 +37,15 @@ jobs:
       - name: Instalar dependencias
         run: pip install -e .
 
+      - name: Escribir .env desde el secret único
+        env:
+          BIWENGER_ENV: ${{ secrets.BIWENGER_ENV }}
+        run: printf '%s\n' "$BIWENGER_ENV" > .env
+
       - name: Ejecutar ingesta y generar dashboard
         env:
-          BIWENGER_EMAIL: ${{ secrets.BIWENGER_EMAIL }}
-          BIWENGER_PASSWORD: ${{ secrets.BIWENGER_PASSWORD }}
-          BIWENGER_USER_ID: ${{ secrets.BIWENGER_USER_ID }}
-          BIWENGER_LEAGUE_ID: ${{ secrets.BIWENGER_LEAGUE_ID }}
-          BIWENGER_VERSION: ${{ secrets.BIWENGER_VERSION }}
-          BIWENGER_LEAGUE_NAME: ${{ secrets.BIWENGER_LEAGUE_NAME }}
-          BIWENGER_SCORE_DEFAULT: as
           # BD persistente en el repo -> acumulativa entre ejecuciones
+          # (la variable de entorno tiene prioridad sobre el .env)
           DATABASE_URL: sqlite:///clouddata/biwenger.db
         run: |
           biwenger daily
