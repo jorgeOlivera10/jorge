@@ -1,0 +1,44 @@
+# Credenciales y configuración local — NUNCA subir
+.env
+*.env
+!.env.example
+
+# Base de datos local
+*.db
+*.sqlite
+*.sqlite3
+data/
+
+# Excepción: la BD y el sitio que gestiona el GitHub Action (acumulativo en la nube)
+!clouddata/
+!clouddata/biwenger.db
+!site/
+
+# Caché de la API
+.cache/
+*.cache
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Informes generados por el job diario
+reports/
+
+# Logs
+*.log
+logs/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

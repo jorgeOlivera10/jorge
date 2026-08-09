@@ -1,0 +1,82 @@
+name: Biwenger dashboard diario
+
+# Se ejecuta cada día a las 07:30 de España (el mercado se actualiza a las 07:00)
+# y también a mano desde la pestaña Actions (Run workflow). Genera el dashboard,
+# lo publica en GitHub Pages y guarda de forma ACUMULATIVA la BD y un histórico.
+#
+# GitHub usa horario UTC. 07:30 España = 05:30 UTC en horario de VERANO (CEST).
+# En INVIERNO (CET, desde finales de octubre) 07:30 España = 06:30 UTC: cuando
+# cambie la hora, pon "30 6 * * *" (o avísame y lo cambio).
+on:
+  schedule:
+    - cron: "30 5 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write        # para commitear la BD y el histórico (acumulativo)
+  pages: write           # para publicar en GitHub Pages
+  id-token: write
+
+concurrency:
+  group: biwenger-dashboard
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: biwenger
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: pip install -e .
+
+      - name: Ejecutar ingesta y generar dashboard
+        env:
+          BIWENGER_EMAIL: ${{ secrets.BIWENGER_EMAIL }}
+          BIWENGER_PASSWORD: ${{ secrets.BIWENGER_PASSWORD }}
+          BIWENGER_USER_ID: ${{ secrets.BIWENGER_USER_ID }}
+          BIWENGER_LEAGUE_ID: ${{ secrets.BIWENGER_LEAGUE_ID }}
+          BIWENGER_VERSION: ${{ secrets.BIWENGER_VERSION }}
+          BIWENGER_LEAGUE_NAME: ${{ secrets.BIWENGER_LEAGUE_NAME }}
+          BIWENGER_SCORE_DEFAULT: as
+          # BD persistente en el repo -> acumulativa entre ejecuciones
+          DATABASE_URL: sqlite:///clouddata/biwenger.db
+        run: |
+          biwenger daily
+          mkdir -p site/history
+          cp reports/dashboard.html site/index.html
+          cp reports/dashboard.html "site/history/$(date -u +%F).html"
+          # copia también el informe markdown del día al histórico
+          cp reports/$(date -u +%F).md "site/history/$(date -u +%F).md" || true
+
+      - name: Guardar BD e histórico (commit acumulativo)
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add biwenger/clouddata biwenger/site
+          git commit -m "Dashboard $(date -u +%F)" || echo "Sin cambios que guardar"
+          git push || echo "Nada que empujar"
+
+      - name: Preparar artefacto de Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: biwenger/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publicar en GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

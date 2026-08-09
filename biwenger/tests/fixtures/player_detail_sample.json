@@ -1,0 +1,28 @@
+{
+  "status": 200,
+  "data": {
+    "id": 1001,
+    "name": "Lewandowski",
+    "slug": "lewandowski",
+    "position": 4,
+    "price": 25000000,
+    "priceIncrement": 200000,
+    "status": "doubt",
+    "statusInfo": "Molestias musculares, duda para la jornada",
+    "fitness": [8, 6, null, 10, 7],
+    "reports": [
+      { "points": 10, "home": true, "status": { "status": "ok" },
+        "match": { "status": "finished", "round": { "id": 1, "name": "Jornada 1" } },
+        "rawStats": { "minutesPlayed": 90 }, "star": true }
+    ],
+    "news": [
+      { "date": 1723200000, "title": "Duda por unas molestias", "content": "El delantero arrastra molestias." },
+      { "date": 1723100000, "title": "Entrenamiento parcial", "content": "Trabajó al margen." }
+    ],
+    "seasons": [
+      { "id": "2024", "name": "Temporada 2024/2025", "points": 220, "games": 36 },
+      { "id": "2023", "name": "Temporada 2023/2024", "points": 180, "games": 30 }
+    ],
+    "prices": [[250810, 24800000], [250811, 25000000]]
+  }
+}

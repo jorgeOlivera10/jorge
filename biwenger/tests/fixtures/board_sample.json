@@ -1,0 +1,46 @@
+[
+  {
+    "date": 1723100000,
+    "type": "market",
+    "content": [
+      { "player": 1001, "amount": 8000000, "to": { "id": 501, "name": "Jorge" } },
+      { "player": 1002, "amount": 5000000, "to": { "id": 502, "name": "Rival A" } }
+    ]
+  },
+  {
+    "date": 1723200000,
+    "type": "transfer",
+    "content": [
+      {
+        "player": 1003,
+        "amount": 12000000,
+        "from": { "id": 502, "name": "Rival A" },
+        "to": { "id": 501, "name": "Jorge" }
+      }
+    ]
+  },
+  {
+    "date": 1723300000,
+    "type": "roundFinished",
+    "content": {
+      "round": { "id": 1, "name": "Jornada 1" },
+      "results": [
+        { "user": { "id": 501, "name": "Jorge" }, "position": 1, "points": 72, "bonus": 1000000 },
+        { "user": { "id": 502, "name": "Rival A" }, "position": 2, "points": 65, "bonus": 500000 },
+        { "user": { "id": 503, "name": "Rival B" }, "position": 3, "points": 40 }
+      ]
+    }
+  },
+  {
+    "date": 1723400000,
+    "type": "loan",
+    "content": [
+      {
+        "player": 1004,
+        "amount": 300000,
+        "from": { "id": 503, "name": "Rival B" },
+        "to": { "id": 502, "name": "Rival A" }
+      }
+    ]
+  }
+]

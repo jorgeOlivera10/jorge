@@ -1,0 +1,17 @@
+{
+  "status": 200,
+  "data": {
+    "season": { "id": 2025, "name": "2025-26" },
+    "players": {
+      "1001": { "id": 1001, "name": "Lewandowski", "slug": "lewandowski", "teamID": 1, "position": 4, "price": 25000000, "points": 210 },
+      "1002": { "id": 1002, "name": "Vinicius", "slug": "vinicius", "teamID": 2, "position": 3, "price": 30000000, "points": 185 },
+      "1003": { "id": 1003, "name": "Oblak", "slug": "oblak", "teamID": 3, "position": 1, "price": 18000000, "points": 140 },
+      "1004": { "id": 1004, "name": "Suplente", "slug": "suplente", "teamID": 3, "position": 2, "price": 500000, "points": 5 }
+    },
+    "teams": {
+      "1": { "id": 1, "name": "Barcelona" },
+      "2": { "id": 2, "name": "Real Madrid" },
+      "3": { "id": 3, "name": "Atletico" }
+    }
+  }
+}
