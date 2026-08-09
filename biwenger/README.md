@@ -160,10 +160,30 @@ En vez del servidor Streamlit, `biwenger daily` (o `biwenger html`) genera un
 - **En el móvil, desde cualquier sitio:** guarda ese `dashboard.html` en tu
   **Google Drive / iCloud** (o mándatelo por WhatsApp/Telegram) y ábrelo en el
   móvil. Es privado (solo tú lo tienes) y funciona sin PC encendido.
-- **Siempre online y automático (sin tocar nada):** un **GitHub Action** puede
-  ejecutar el job cada día y publicar el dashboard en **GitHub Pages** (URL fija
-  para el móvil). Ojo: Pages es **público**; pregúntame y te lo monto (o te dejo
-  una variante privada).
+- **Siempre online y automático (sin PC):** un **GitHub Action** ejecuta el job
+  cada día y publica el dashboard en **GitHub Pages** (URL fija para el móvil).
+
+### Despliegue automático en GitHub Pages (URL pública)
+
+Ya está el workflow en `.github/workflows/biwenger-dashboard.yml`. Corre cada día
+a las **23:30 UTC** (00:30–01:30 en España, tras el reinicio del mercado), genera
+el dashboard, lo publica en Pages y **guarda de forma acumulativa** la base de
+datos (`biwenger/clouddata/biwenger.db`) y un histórico por día
+(`biwenger/site/history/`).
+
+Para activarlo (una vez):
+
+1. **Que el proyecto esté en la rama por defecto** (`master`): las tareas
+   programadas solo corren desde la rama por defecto. Mergea esta rama a `master`.
+2. **Añade los Secrets** en GitHub → *Settings → Secrets and variables → Actions*:
+   `BIWENGER_EMAIL`, `BIWENGER_PASSWORD`, `BIWENGER_USER_ID`, `BIWENGER_LEAGUE_ID`,
+   `BIWENGER_VERSION`, `BIWENGER_LEAGUE_NAME` (van cifrados, nunca se muestran).
+3. **Activa Pages**: *Settings → Pages → Build and deployment → Source = GitHub Actions*.
+4. Lánzalo a mano la primera vez: *Actions → "Biwenger dashboard diario" → Run workflow*.
+
+La URL será `https://jorgeOlivera10.github.io/jorge/`. ⚠️ Es **pública** (cualquiera
+con el enlace ve tu análisis; no tus credenciales). Se puede hacer privada si
+prefieres — pregúntame.
 
 ## Sistemas de puntuación
 

@@ -216,6 +216,29 @@ def store_real_money_ledger(session: Session, entries: Iterable[Any]) -> int:
     return n
 
 
+def store_market_daily(session: Session, snapshot_date: date, sales: Iterable[dict[str, Any]]) -> int:
+    """Guarda los jugadores en el mercado de un día (idempotente por fecha+jugador)."""
+    n = 0
+    for sale in sales:
+        pid = sale.get("player_id")
+        if pid is None:
+            continue
+        exists = session.scalar(
+            select(models.MarketDaily.id).where(
+                models.MarketDaily.date == snapshot_date,
+                models.MarketDaily.player_id == pid,
+            )
+        )
+        if exists is None:
+            session.add(models.MarketDaily(
+                date=snapshot_date, player_id=pid,
+                price=sale.get("price"), seller_id=sale.get("seller_id"),
+            ))
+            n += 1
+    session.flush()
+    return n
+
+
 def update_player_scouting(session: Session, detail: dict[str, Any]) -> None:
     """Actualiza los campos de scouting de un Player desde una ficha parseada."""
     from datetime import datetime

@@ -37,6 +37,23 @@ def _load_chollos_from_db(session: Session, *, top: int = 10) -> list:
     return rank_chollos(values, min_games=1, top=top)
 
 
+def _ingest_market(client: Any, settings: Settings, session: Session, today: date) -> None:
+    """Ingiere el mercado del día (banca) y scoutea esos jugadores. Defensivo."""
+    from biwenger.ingest.market import parse_market
+    from biwenger.ingest.scout import scout_players
+    from biwenger.ingest import store
+
+    try:
+        sales = parse_market(client.get_my_market())
+    except Exception as exc:  # noqa: BLE001
+        log.warning("No se pudo leer el mercado: %s", exc)
+        return
+    store.store_market_daily(session, today, sales)
+    bank_ids = [x["player_id"] for x in sales if not x["seller_id"]][:60]
+    if bank_ids and hasattr(client, "get_player_detail"):
+        scout_players(client, session, bank_ids, score_name=settings.score_default, today=today)
+
+
 def build_report(summary: dict[str, Any], chollos: list) -> str:
     """Construye el informe del día en Markdown a partir del resumen de ingesta."""
     lines: list[str] = []
@@ -113,6 +130,7 @@ def run_daily(
 
     with session_scope(engine) as session:
         summary = run_ingest(client, settings, session, today=today)
+        _ingest_market(client, settings, session, today)
         chollos = _load_chollos_from_db(session)
         dashboard_html = build_dashboard_html(load_dashboard_data(session, settings.league_name))
 

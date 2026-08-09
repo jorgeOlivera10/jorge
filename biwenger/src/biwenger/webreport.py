@@ -84,12 +84,54 @@ def load_dashboard_data(session: Session, league_name: str = "Mi Liga") -> dict[
         elif led.concept == "deposit_reset":
             row["resets"] += 1
 
+    market = _load_market(session, players, economy, users)
+
     return {
         "league": league_name, "me": me.name if me else None,
         "date": str(last_econ) if last_econ else None,
-        "economy": economy, "my_team": my_team, "chollos": chollos,
+        "economy": economy, "my_team": my_team, "chollos": chollos, "market": market,
         "squads": squads, "pain": sorted(pain.values(), key=lambda r: r["loss"], reverse=True),
     }
+
+
+def _load_market(session: Session, players: list, economy: list, users: dict) -> list[dict]:
+    """Mercado del día (banca) con veredicto, valor y puja sugerida."""
+    from biwenger.analysis.expected import compute_player_value
+    from biwenger.analysis.recommend import RivalCeiling, suggest_bid
+
+    last_mkt = session.scalar(select(models.MarketDaily.date).order_by(models.MarketDaily.date.desc()))
+    if last_mkt is None:
+        return []
+    rounds_played = max((p.played or 0) for p in players) if players else 0
+    my_max_bid, rivals = 0, []
+    for r in economy:
+        if r.get("me"):
+            my_max_bid = r["max_bid"]
+        else:
+            rivals.append(RivalCeiling(0, r["manager"], r["max_bid"]))
+
+    rows = session.execute(
+        select(models.MarketDaily, models.Player)
+        .join(models.Player, models.Player.id == models.MarketDaily.player_id, isouter=True)
+        .where(models.MarketDaily.date == last_mkt)
+    ).all()
+    out = []
+    for md, p in rows:
+        if p is None or md.seller_id:   # solo banca
+            continue
+        pv = compute_player_value(_pdict(p), rounds_played or None)
+        o = player_outlook(p)
+        sug = suggest_bid(pv, my_max_bid, rivals) if my_max_bid else None
+        out.append({
+            "name": p.name, "pos": _POS.get(p.position or 0, "?"),
+            "price": md.price if md.price is not None else p.price,
+            "status": o.status_label, "will_play": o.will_play,
+            "expected": o.expected_ppg, "value_ratio": pv.value_ratio,
+            "suggested": (sug.suggested_bid if sug else None),
+            "sell_now": o.sell_now, "news": o.news_title or "",
+        })
+    out.sort(key=lambda r: r["value_ratio"], reverse=True)
+    return out
 
 
 def _pdict(p) -> dict:
@@ -149,6 +191,21 @@ def build_dashboard_html(data: dict[str, Any]) -> str:
     team = _table(["Jugador", "Pos", "Estado", "¿Juega?", "Esperado", "Precio", "Tend.", "Nota"],
                   team_rows, team_cls) if team_rows else "<p class='muted'>Sin plantilla. Ejecuta <code>biwenger daily</code>.</p>"
 
+    # Mercado (banca)
+    mkt_rows, mkt_cls = [], []
+    for m in data.get("market", []):
+        mkt_rows.append([
+            _e(m["name"]), m["pos"], _money(m["price"]), _e(m["status"]), _e(m["will_play"]),
+            (f"{m['expected']}" if m["expected"] is not None else "—"),
+            f'<b>{m["value_ratio"]}</b>',
+            _money(m["suggested"]) if m["suggested"] else "—",
+            ("<b>⚠</b> " if m["sell_now"] else "") + _e(m["news"]),
+        ])
+        mkt_cls.append("sell" if m["sell_now"] else "")
+    market = _table(["Jugador", "Pos", "Precio", "Estado", "¿Juega?", "Esperado", "Valor", "Puja sug.", "Nota"],
+                    mkt_rows, mkt_cls) if mkt_rows \
+        else "<p class='muted'>La banca no tiene jugadores en el mercado ahora (o aún no se ha ingerido).</p>"
+
     # Chollos
     chollo_rows = [[_e(c.name), c.position_name, _e(c.team_name or "—"), _money(c.price),
                     str(c.points_per_match), str(c.expected_points), f'<b>{c.value_ratio}</b>']
@@ -177,7 +234,8 @@ def build_dashboard_html(data: dict[str, Any]) -> str:
 
     return _PAGE.format(
         league=league, me=me, generated=_e(generated), date=_e(data.get("date") or "—"),
-        alert=alert_html, economy=econ, team=team, chollos=chollos, squads=squads, pain=pain,
+        alert=alert_html, economy=econ, team=team, market=market, chollos=chollos,
+        squads=squads, pain=pain,
     )
 
 
@@ -192,16 +250,22 @@ _PAGE = """<!doctype html>
   * {{ box-sizing:border-box; }}
   body {{ margin:0; background:var(--bg); color:var(--fg);
           font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }}
-  header {{ padding:18px 16px; position:sticky; top:0; background:linear-gradient(180deg,#0f1420,#0f1420ee);
+  header {{ padding:16px 16px 0; position:sticky; top:0; z-index:5;
+            background:linear-gradient(180deg,#0f1420,#0f1420ee);
             border-bottom:1px solid var(--line); backdrop-filter:blur(6px); }}
   h1 {{ margin:0; font-size:20px; }}
-  .sub {{ color:var(--muted); font-size:13px; margin-top:3px; }}
-  main {{ padding:12px 14px 40px; max-width:1000px; margin:0 auto; }}
-  section {{ background:var(--card); border:1px solid var(--line); border-radius:14px;
-             padding:14px; margin:14px 0; }}
+  .sub {{ color:var(--muted); font-size:13px; margin:3px 0 10px; }}
+  nav {{ display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:8px; }}
+  nav button {{ flex:0 0 auto; background:transparent; color:var(--muted); border:1px solid var(--line);
+                border-radius:999px; padding:7px 13px; font-size:14px; cursor:pointer; }}
+  nav button.active {{ background:var(--accent); color:#08130c; border-color:var(--accent); font-weight:700; }}
+  main {{ padding:14px; max-width:1000px; margin:0 auto; }}
+  section {{ display:none; background:var(--card); border:1px solid var(--line); border-radius:14px;
+             padding:14px; }}
+  section.active {{ display:block; }}
   h2 {{ font-size:16px; margin:0 0 10px; }}
   .alert {{ background:var(--sell); border:1px solid #7a2233; color:#ffd7de;
-            padding:11px 13px; border-radius:12px; margin:12px 0; font-weight:600; }}
+            padding:11px 13px; border-radius:12px; margin:0 14px 4px; font-weight:600; }}
   .tw {{ overflow-x:auto; -webkit-overflow-scrolling:touch; }}
   table {{ border-collapse:collapse; width:100%; font-size:14px; min-width:420px; }}
   th,td {{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }}
@@ -212,27 +276,48 @@ _PAGE = """<!doctype html>
   .muted {{ color:var(--muted); }}
   details {{ border:1px solid var(--line); border-radius:10px; margin:8px 0; padding:4px 10px; }}
   summary {{ cursor:pointer; padding:6px 0; font-weight:600; }}
-  code {{ background:#0b0f18; padding:2px 6px; border-radius:6px; }}
   footer {{ color:var(--muted); font-size:12px; text-align:center; padding:20px; }}
 </style></head>
 <body>
 <header>
   <h1>⚽ Biwenger · {league}</h1>
   <div class="sub">Tú: <b>{me}</b> · datos del {date} · generado {generated}</div>
+  <nav>
+    <button class="active" data-tab="economia">💰 Economía</button>
+    <button data-tab="equipo">👕 Mi equipo</button>
+    <button data-tab="mercado">🛒 Mercado</button>
+    <button data-tab="chollos">💎 Chollos</button>
+    <button data-tab="plantillas">📋 Plantillas</button>
+    <button data-tab="pain">😱 Pain</button>
+  </nav>
 </header>
+{alert}
 <main>
-  {alert}
-  <section><h2>💰 Economía (saldo · valor · puja máxima)</h2>{economy}
+  <section id="economia" class="active"><h2>💰 Economía (saldo · valor · puja máxima)</h2>{economy}
     <div class="muted" style="margin-top:8px;font-size:12px">Puja máxima = saldo + 0,25 × valor de equipo. Estimación (tu saldo es exacto).</div>
   </section>
-  <section><h2>👕 Tu equipo</h2>{team}
+  <section id="equipo"><h2>👕 Tu equipo</h2>{team}
     <div class="muted" style="margin-top:8px;font-size:12px">"Esperado" = puntos/partido (esta temporada o la pasada).</div>
   </section>
-  <section><h2>💎 Chollos (mejor relación puntos/precio)</h2>{chollos}</section>
-  <section><h2>🛒 Plantillas de la liga</h2>{squads}</section>
-  <section><h2>😱 Pain tracker (dinero real €)</h2>{pain}
+  <section id="mercado"><h2>🛒 Mercado de hoy (banca)</h2>{market}
+    <div class="muted" style="margin-top:8px;font-size:12px">Puja sugerida = mercado +15%, limitada por tu puja máxima.</div>
+  </section>
+  <section id="chollos"><h2>💎 Chollos (mejor relación puntos/precio)</h2>{chollos}</section>
+  <section id="plantillas"><h2>📋 Plantillas de la liga</h2>{squads}</section>
+  <section id="pain"><h2>😱 Pain tracker (dinero real €)</h2>{pain}
     <div class="muted" style="margin-top:8px;font-size:12px">Castigo por jornada: último 3€, penúltimo 2€, antepenúltimo 1€.</div>
   </section>
 </main>
-<footer>Biwenger Analyzer · abre este archivo en cualquier navegador</footer>
+<footer>Biwenger Analyzer · actualizado automáticamente cada día</footer>
+<script>
+  document.querySelectorAll('nav button').forEach(function(b){{
+    b.addEventListener('click', function(){{
+      document.querySelectorAll('nav button').forEach(function(x){{x.classList.remove('active');}});
+      document.querySelectorAll('main section').forEach(function(s){{s.classList.remove('active');}});
+      b.classList.add('active');
+      document.getElementById(b.dataset.tab).classList.add('active');
+      window.scrollTo(0,0);
+    }});
+  }});
+</script>
 </body></html>"""
