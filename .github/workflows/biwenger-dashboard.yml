@@ -1,12 +1,15 @@
 name: Biwenger dashboard diario
 
-# Se ejecuta cada día tras el reinicio del mercado (23:30 UTC = 00:30/01:30 en
-# España según horario de verano/invierno) y también a mano desde la pestaña
-# Actions (Run workflow). Genera el dashboard, lo publica en GitHub Pages y
-# guarda de forma ACUMULATIVA la base de datos y un histórico por día.
+# Se ejecuta cada día a las 07:30 de España (el mercado se actualiza a las 07:00)
+# y también a mano desde la pestaña Actions (Run workflow). Genera el dashboard,
+# lo publica en GitHub Pages y guarda de forma ACUMULATIVA la BD y un histórico.
+#
+# GitHub usa horario UTC. 07:30 España = 05:30 UTC en horario de VERANO (CEST).
+# En INVIERNO (CET, desde finales de octubre) 07:30 España = 06:30 UTC: cuando
+# cambie la hora, pon "30 6 * * *" (o avísame y lo cambio).
 on:
   schedule:
-    - cron: "30 23 * * *"
+    - cron: "30 5 * * *"
   workflow_dispatch: {}
 
 permissions:
