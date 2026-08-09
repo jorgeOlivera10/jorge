@@ -175,9 +175,9 @@ Para activarlo (una vez):
 
 1. **Que el proyecto esté en la rama por defecto** (`master`): las tareas
    programadas solo corren desde la rama por defecto. Mergea esta rama a `master`.
-2. **Añade los Secrets** en GitHub → *Settings → Secrets and variables → Actions*:
-   `BIWENGER_EMAIL`, `BIWENGER_PASSWORD`, `BIWENGER_USER_ID`, `BIWENGER_LEAGUE_ID`,
-   `BIWENGER_VERSION`, `BIWENGER_LEAGUE_NAME` (van cifrados, nunca se muestran).
+2. **Añade UN secret** en GitHub → *Settings → Secrets and variables → Actions*
+   llamado **`BIWENGER_ENV`** con el contenido completo de tu `.env` (todas las
+   líneas: email, password, IDs, versión, nombre de liga). Va cifrado.
 3. **Activa Pages**: *Settings → Pages → Build and deployment → Source = GitHub Actions*.
 4. Lánzalo a mano la primera vez: *Actions → "Biwenger dashboard diario" → Run workflow*.
 
