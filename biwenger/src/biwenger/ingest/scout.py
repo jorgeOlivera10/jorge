@@ -44,7 +44,9 @@ def scout_players(
 
         detail = parse_player_detail(raw)
         store.update_player_scouting(session, detail)
-        store.store_player_news(session, pid, detail.get("news", []))
+        # Guardamos las noticias bajo el id del jugador que DEVUELVE la ficha
+        # (consistente con el resto), no bajo el id pedido.
+        store.store_player_news(session, detail.get("player_id") or pid, detail.get("news", []))
         # Puntos por jornada (con minutos) y precios históricos.
         store.store_player_points(session, parse_player_reports(raw, score_name))
         store.store_market_values(session, parse_player_prices(raw))

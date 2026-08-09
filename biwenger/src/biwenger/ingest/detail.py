@@ -22,16 +22,23 @@ def parse_player_detail(detail: Any) -> dict[str, Any]:
     status = body.get("status")
     status_info = body.get("statusInfo") if isinstance(body.get("statusInfo"), str) else None
 
-    # Noticias (lista de {date, title, content})
+    # Noticias: el campo `news` de la ficha trae el blog editorial GENÉRICO de
+    # Biwenger (se repite entre jugadores), así que filtramos y nos quedamos solo
+    # con las que mencionan al jugador por su nombre. Así la "nota" es relevante.
+    name_tokens = _name_tokens(body.get("name"))
     news: list[dict[str, Any]] = []
     for n in body.get("news") or []:
         if not isinstance(n, dict):
             continue
         d = _epoch_to_date(n.get("date"))
         title = n.get("title") or n.get("headline")
-        if title:
-            news.append({"date": d, "title": str(title)[:300],
-                         "content": (str(n.get("content"))[:2000] if n.get("content") else None)})
+        if not title:
+            continue
+        title = str(title)
+        if name_tokens and not any(tok in title.lower() for tok in name_tokens):
+            continue  # noticia genérica, no del jugador
+        news.append({"date": d, "title": title[:300],
+                     "content": (str(n.get("content"))[:2000] if n.get("content") else None)})
     news.sort(key=lambda x: (x["date"] or date.min), reverse=True)
 
     # Forma reciente: media de los valores numéricos de fitness.
@@ -54,6 +61,13 @@ def parse_player_detail(detail: Any) -> dict[str, Any]:
         "last_season_points": last_season.get("points"),
         "last_season_games": last_season.get("games"),
     }
+
+
+def _name_tokens(name: Any) -> list[str]:
+    """Tokens significativos del nombre (>=4 letras) para filtrar noticias."""
+    if not isinstance(name, str):
+        return []
+    return [t.lower() for t in name.replace(".", " ").split() if len(t) >= 4]
 
 
 def _last_season(seasons: Any) -> dict[str, int | None]:

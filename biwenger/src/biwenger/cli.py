@@ -373,7 +373,7 @@ def market(
             f"{o.expected_ppg}" if o.expected_ppg is not None else "—",
             str(pv.value_ratio),
             _money(sug.suggested_bid) if sug else "—",
-            ("[red]⚠ [/]" if o.sell_now else "") + (o.news_title or ""),
+            ("[red]⚠ [/]" if o.sell_now else "") + o.note,
         ]
         table.add_row(*cells, style="red" if o.sell_now else None)
     console.print(table)
@@ -434,7 +434,7 @@ def team() -> None:
             o.name or "—", POS.get(o.position or 0, "?"), o.status_label, o.will_play,
             f"{o.expected_ppg} ({o.basis})" if o.expected_ppg is not None else "sin datos",
             _money(o.price), _trend(o.price_increment),
-            ("[bold red]VENDER[/] " if o.sell_now else "") + (o.news_title or ""),
+            ("[bold red]VENDER[/] " if o.sell_now else "") + o.note,
             style=row_style,
         )
     console.print(table)
@@ -471,7 +471,7 @@ def alerts() -> None:
     console.print("[bold red]⚠ Jugadores a revisar / vender:[/]")
     for o in riesgos:
         console.print(f"  • [cyan]{o.name}[/] — {o.status_label}"
-                      + (f" · {o.news_title}" if o.news_title else ""))
+                      + (f" · {o.status_info}" if o.status_info else ""))
 
 
 @app.command()

@@ -36,7 +36,9 @@ class PlayerOutlook:
     will_play: str            # Titular / Rotación / Poco habitual / No disponible
     expected_ppg: float | None  # puntos esperados por partido (o de la temp. pasada)
     basis: str                # "esta temporada" | "temp. pasada" | "sin datos"
-    news_title: str | None
+    status_info: str | None   # motivo del estado (lesión/duda), específico del jugador
+    news_title: str | None    # noticia del jugador (ya filtrada; puede ser None)
+    note: str                 # texto a mostrar como 'nota' (estado > noticia)
     sell_now: bool            # alerta de venta inmediata
     reason: str
 
@@ -80,11 +82,18 @@ def player_outlook(p: Any) -> PlayerOutlook:
     else:
         will_play = "Sin histórico"
 
+    status_info = g("status_info")
     news = g("news_title")
-    sell_now = risky or bool(news and any(w in news.lower() for w in _INJURY_WORDS))
+    # Alerta de venta: por estado (lesión/duda/sanción) o por el motivo del estado.
+    # NO usamos el feed de noticias genérico para esto (no es del jugador).
+    sell_now = risky or bool(status_info and any(w in status_info.lower() for w in _INJURY_WORDS))
+
+    # 'Nota' a mostrar: el motivo del estado es lo específico del jugador; si no
+    # hay, mostramos la noticia ya filtrada (solo se guardan las que le mencionan).
+    note = status_info or (news or "")
 
     if sell_now:
-        reason = f"{STATUS_LABEL.get(status, status or '')}" + (f" · {news}" if news else "")
+        reason = f"{STATUS_LABEL.get(status, status or '')}" + (f" · {status_info}" if status_info else "")
     elif expected is not None:
         reason = f"~{expected} pts/partido ({basis}); {will_play.lower()}"
     else:
@@ -102,7 +111,9 @@ def player_outlook(p: Any) -> PlayerOutlook:
         will_play=will_play,
         expected_ppg=expected,
         basis=basis,
+        status_info=status_info,
         news_title=news,
+        note=note,
         sell_now=sell_now,
         reason=reason.strip(" ·"),
     )

@@ -128,7 +128,7 @@ def _load_market(session: Session, players: list, economy: list, users: dict) ->
             "status": o.status_label, "will_play": o.will_play,
             "expected": o.expected_ppg, "value_ratio": pv.value_ratio,
             "suggested": (sug.suggested_bid if sug else None),
-            "sell_now": o.sell_now, "news": o.news_title or "",
+            "sell_now": o.sell_now, "news": o.note,
         })
     out.sort(key=lambda r: r["value_ratio"], reverse=True)
     return out
@@ -185,7 +185,7 @@ def build_dashboard_html(data: dict[str, Any]) -> str:
             _e(o.name), _POS.get(o.position or 0, "?"), _e(o.status_label), _e(o.will_play),
             (f"{o.expected_ppg}" if o.expected_ppg is not None else "—"),
             _money(o.price), trend,
-            ("<b>VENDER</b> " if o.sell_now else "") + _e(o.news_title or ""),
+            ("<b>VENDER</b> " if o.sell_now else "") + _e(o.note),
         ])
         team_cls.append("sell" if o.sell_now else "")
     team = _table(["Jugador", "Pos", "Estado", "¿Juega?", "Esperado", "Precio", "Tend.", "Nota"],

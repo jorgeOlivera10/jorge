@@ -14,8 +14,11 @@ def test_parse_player_detail_status_and_news():
     assert d["player_id"] == 1001
     assert d["status"] == "doubt"
     assert d["is_risky"] is True
-    assert d["news_title"] == "Duda por unas molestias"     # la más reciente primero
+    # La noticia genérica del blog se filtra; solo quedan las que mencionan al
+    # jugador. La más reciente primero.
+    assert d["news_title"] == "Lewandowski, duda por unas molestias"
     assert len(d["news"]) == 2
+    assert all("lewandowski" in n["title"].lower() for n in d["news"])
     assert d["last_season_points"] == 220 and d["last_season_games"] == 36
     assert d["fitness_avg"] == round((8 + 6 + 10 + 7) / 4, 2)
 
@@ -23,7 +26,8 @@ def test_parse_player_detail_status_and_news():
 def _player(**kw):
     base = dict(id=1, name="X", position=4, team_name="T", price=5_000_000,
                 price_increment=0, status="ok", played=0, total_points=0,
-                last_season_points=None, last_season_games=None, news_title=None)
+                last_season_points=None, last_season_games=None,
+                status_info=None, news_title=None)
     base.update(kw)
     return SimpleNamespace(**base)
 
@@ -45,11 +49,22 @@ def test_outlook_injured_triggers_sell():
     assert "LESIONADO" in o.status_label
 
 
-def test_outlook_sell_on_injury_news_even_if_status_ok():
-    p = _player(status="ok", news_title="Rotura de fibras, baja 3 semanas",
+def test_outlook_sell_on_injury_status_info():
+    # El motivo del estado (statusInfo) es específico del jugador: si menciona
+    # lesión/baja, se marca venta aunque el status no sea de riesgo.
+    p = _player(status="ok", status_info="Rotura de fibras, baja 3 semanas",
                 last_season_games=25, last_season_points=120)
     o = player_outlook(p)
     assert o.sell_now is True
+    assert o.note == "Rotura de fibras, baja 3 semanas"
+
+
+def test_outlook_ignores_generic_news_for_sell():
+    # Una noticia genérica del blog NO debe disparar venta (no es del jugador).
+    p = _player(status="ok", news_title="Jugadores a elegir como Ariete: Jornada 3",
+                last_season_games=30, last_season_points=180)
+    o = player_outlook(p)
+    assert o.sell_now is False
 
 
 def test_outlook_low_games_is_not_starter():
