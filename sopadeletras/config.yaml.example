@@ -1,0 +1,13 @@
+# Configuración de Sopa de Letras Extractor.
+# Copia este archivo a "config.yaml" y ajústalo. Todo esto también
+# se puede sobreescribir con flags en la línea de comandos.
+
+whisper:
+  modelo: medium        # tiny | base | small | medium | large-v3
+  idioma: es            # idioma del audio
+  device: auto          # auto | cpu | cuda
+  compute_type: auto    # auto | int8 | int8_float16 | float16 | float32
+  beam_size: 5          # calidad vs. velocidad de la transcripción
+
+rutas:
+  data: data            # carpeta base para audio, transcripciones y la BD

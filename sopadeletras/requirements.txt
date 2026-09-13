@@ -1,0 +1,6 @@
+# Dependencias Python de Sopa de Letras Extractor.
+# ffmpeg y (opcionalmente) los binarios del sistema NO se instalan por pip:
+# ffmpeg debe estar instalado aparte (ver README).
+
+faster-whisper>=1.0.0
+PyYAML>=6.0

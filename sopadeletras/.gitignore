@@ -1,0 +1,16 @@
+# Configuración local del usuario
+config.yaml
+
+# Carpeta de trabajo: audio, transcripciones y base de datos
+data/
+
+# Exportaciones sueltas
+*.csv
+*.json
+!config.yaml.example
+
+# Artefactos de Python
+__pycache__/
+*.pyc
+.venv/
+venv/
