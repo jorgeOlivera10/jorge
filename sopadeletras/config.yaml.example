@@ -11,3 +11,9 @@ whisper:
 
 rutas:
   data: data            # carpeta base para audio, transcripciones y la BD
+
+descarga:
+  # Si pasas la URL de una PÁGINA (no un .m3u8), se usa yt-dlp para descargarla.
+  # 'navegador' hace que yt-dlp use las cookies de tu navegador (por si el vídeo
+  # requiere haber iniciado sesión). Déjalo vacío para no usar cookies.
+  navegador:            # chrome | firefox | edge | ...  (vacío = ninguno)

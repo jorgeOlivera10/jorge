@@ -46,3 +46,30 @@ def validar_fecha(fecha: str) -> str:
 def es_url(fuente: str) -> bool:
     """True si la fuente parece una URL (http/https), False si es ruta local."""
     return fuente.lower().startswith(("http://", "https://"))
+
+
+# Extensiones que ffmpeg puede leer directamente (stream o archivo de medios).
+_EXT_MEDIA = (
+    ".m3u8", ".mpd", ".mp4", ".mkv", ".webm", ".ts",
+    ".m4a", ".mp3", ".aac", ".wav", ".ogg", ".flac", ".mov",
+)
+
+
+def tipo_fuente(fuente: str) -> str:
+    """Clasifica la fuente para saber cómo tratarla.
+
+    Devuelve:
+      - "archivo"  : ruta a un archivo local existente.
+      - "media"    : URL que apunta directamente a un medio (.m3u8/.mp4/...),
+                     que ffmpeg puede leer sin descargar aparte.
+      - "pagina"   : URL de una página web (ej. aragonplay.es/watch/...),
+                     que hay que resolver con yt-dlp.
+    """
+    if not es_url(fuente):
+        return "archivo"
+
+    # Nos quedamos con la parte de la ruta, sin los parámetros (?token=...).
+    ruta = fuente.split("?", 1)[0].lower()
+    if ruta.endswith(_EXT_MEDIA):
+        return "media"
+    return "pagina"

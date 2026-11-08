@@ -34,9 +34,12 @@ repite el trabajo (usa `--force` para rehacer una etapa).
 - **Python 3.10+**
 - **ffmpeg** (binario del sistema, no se instala por pip)
 - **faster-whisper** y **PyYAML** (se instalan por pip)
+- **yt-dlp** (opcional): solo hace falta si le pasas la **URL de una página web**
+  en vez de un `.m3u8` o un archivo. Se instala con `pip install -U yt-dlp`.
 
-> La herramienta **no instala nada por su cuenta**: si falta ffmpeg o
-> faster-whisper, te avisa con instrucciones claras y se detiene.
+> La herramienta **no instala nada por su cuenta**: si falta ffmpeg,
+> faster-whisper o yt-dlp (cuando lo necesita), te avisa con instrucciones
+> claras y se detiene.
 
 ## Instalación
 
@@ -56,10 +59,35 @@ cp config.yaml.example config.yaml
 La **primera** transcripción descarga el modelo de whisper (por defecto
 `medium`) una sola vez; luego queda en caché local y todo funciona offline.
 
-## Cómo obtener la URL `.m3u8` desde Aragón Play (paso manual)
+## Dos formas de pasar el vídeo
 
-Aragón Play no tiene descargador nativo, así que hay que copiar la URL del
-stream a mano desde el navegador:
+### Forma fácil (recomendada): la URL de la página + yt-dlp
+
+Si tienes `yt-dlp` instalado (`pip install -U yt-dlp`), puedes pasar
+directamente la **URL de la página** del capítulo, sin tener que sacar el
+`.m3u8` a mano:
+
+```bash
+python -m sdl ingest \
+  --fuente "https://www.aragonplay.es/watch/media/sopa-de-letras-2026-01-19" \
+  --programa "Sopa de Letras" --fecha 2026-01-19
+```
+
+La herramienta detecta que es una página web y usa yt-dlp para descargar el
+vídeo automáticamente. **Sin F12, sin tokens que caducan.**
+
+Si el vídeo requiere haber iniciado sesión, añade `--navegador chrome` (o
+`firefox`, `edge`...) para que yt-dlp use las cookies de tu navegador:
+
+```bash
+python -m sdl ingest --fuente "https://www.aragonplay.es/watch/..." \
+  --programa "Sopa de Letras" --fecha 2026-01-19 --navegador chrome
+```
+
+### Forma manual: la URL `.m3u8`
+
+Si no quieres usar yt-dlp, o yt-dlp no soporta el vídeo, puedes copiar la URL
+del stream a mano desde el navegador:
 
 1. Abre el capítulo en la web de **Aragón Play** en tu navegador.
 2. Pulsa **F12** para abrir las **herramientas de desarrollador**.

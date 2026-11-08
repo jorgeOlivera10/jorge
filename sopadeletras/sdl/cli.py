@@ -15,10 +15,10 @@ import json
 import sys
 from pathlib import Path
 
-from . import audio, storage, transcribe
+from . import audio, downloader, storage, transcribe
 from .config import cargar_config, Config
 from .deps import DependenciaFaltante
-from .utils import es_url, slug_programa, validar_fecha
+from .utils import slug_programa, tipo_fuente, validar_fecha
 
 
 # ---------------------------------------------------------------------------
@@ -42,9 +42,20 @@ def _procesar_entrada(cfg: Config, fuente: str, programa: str, fecha: str,
         con.close()
         return False
 
+    # Etapa 1b (opcional): si es la URL de una página web, la resolvemos con
+    # yt-dlp y descargamos el audio a un archivo local. Si ya es un .m3u8 o un
+    # archivo local, se lo pasamos tal cual a ffmpeg.
+    tipo = tipo_fuente(fuente)
+    entrada_ffmpeg = fuente
+    if tipo == "pagina":
+        navegador = cfg.descarga.get("navegador")
+        entrada_ffmpeg = str(downloader.descargar_pagina(
+            fuente, cfg.downloads_dir, slug, navegador=navegador, force=force,
+        ))
+
     # Etapa 2: audio
     wav = cfg.audio_dir / f"{slug}.wav"
-    audio.extraer_audio(fuente, wav, force=force)
+    audio.extraer_audio(entrada_ffmpeg, wav, force=force)
 
     # Etapa 3: transcripción
     json_transcripcion = cfg.transcripts_dir / f"{slug}.json"
@@ -190,6 +201,9 @@ def _construir_parser() -> argparse.ArgumentParser:
     p.add_argument("--idioma", help="Idioma del audio (por defecto es).")
     p.add_argument("--device", help="Dispositivo de whisper (auto/cpu/cuda).")
     p.add_argument("--data", help="Carpeta base de datos y caché.")
+    p.add_argument("--navegador", dest="navegador",
+                   help="Navegador del que tomar cookies para yt-dlp "
+                        "(chrome/firefox/edge). Útil si el vídeo pide login.")
 
     sub = p.add_subparsers(dest="comando", required=True)
 
@@ -245,6 +259,9 @@ def main(argv: list[str] | None = None) -> int:
         },
         "rutas": {
             "data": getattr(args, "data", None),
+        },
+        "descarga": {
+            "navegador": getattr(args, "navegador", None),
         },
     }
     cfg = cargar_config(args.config, overrides)

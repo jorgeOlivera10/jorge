@@ -30,6 +30,11 @@ DEFAULTS: dict[str, Any] = {
     "rutas": {
         "data": "data",
     },
+    "descarga": {
+        # Navegador del que tomar las cookies (chrome/firefox/edge/...).
+        # Útil si el vídeo requiere haber iniciado sesión. null = no usar cookies.
+        "navegador": None,
+    },
 }
 
 
@@ -58,12 +63,21 @@ class Config:
         return self.data_dir / "transcripts"
 
     @property
+    def downloads_dir(self) -> Path:
+        return self.data_dir / "downloads"
+
+    @property
+    def descarga(self) -> dict[str, Any]:
+        return self._d["descarga"]
+
+    @property
     def db_path(self) -> Path:
         return self.data_dir / "sopadeletras.db"
 
     def crear_directorios(self) -> None:
         """Crea las carpetas de trabajo si no existen."""
-        for d in (self.data_dir, self.audio_dir, self.transcripts_dir):
+        for d in (self.data_dir, self.audio_dir, self.transcripts_dir,
+                  self.downloads_dir):
             d.mkdir(parents=True, exist_ok=True)
 
 

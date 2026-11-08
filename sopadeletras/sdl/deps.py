@@ -45,6 +45,24 @@ def comprobar_ffmpeg() -> str:
     return ruta
 
 
+def comprobar_yt_dlp() -> str:
+    """Verifica que yt-dlp esté disponible. Devuelve su ruta.
+
+    Hace falta solo cuando la fuente es la URL de una página web (no un
+    .m3u8 ni un archivo local). Lanza DependenciaFaltante con instrucciones.
+    """
+    ruta = shutil.which("yt-dlp")
+    if not ruta:
+        raise DependenciaFaltante(
+            "Has pasado la URL de una página web, y para resolverla hace falta "
+            "'yt-dlp', que no está instalado.\n"
+            "Instálalo con:  pip install -U yt-dlp\n"
+            "(O bien pasa directamente una URL .m3u8 o un archivo local, que no "
+            "necesitan yt-dlp.)"
+        )
+    return ruta
+
+
 def comprobar_faster_whisper() -> None:
     """Verifica que faster-whisper esté instalado (import)."""
     try:
