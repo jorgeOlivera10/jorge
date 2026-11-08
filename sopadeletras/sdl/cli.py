@@ -194,21 +194,26 @@ def _construir_parser() -> argparse.ArgumentParser:
         description="Extrae y guarda transcripciones de 'Sopa de Letras' "
                     "(Aragón TV) para pasárselas luego a otra IA.",
     )
-    p.add_argument("--config", help="Ruta a un config.yaml alternativo.")
-    # Overrides globales de whisper (opcionales).
-    p.add_argument("--whisper-modelo", dest="whisper_modelo",
-                   help="Modelo de whisper (tiny/base/small/medium/large-v3).")
-    p.add_argument("--idioma", help="Idioma del audio (por defecto es).")
-    p.add_argument("--device", help="Dispositivo de whisper (auto/cpu/cuda).")
-    p.add_argument("--data", help="Carpeta base de datos y caché.")
-    p.add_argument("--navegador", dest="navegador",
-                   help="Navegador del que tomar cookies para yt-dlp "
-                        "(chrome/firefox/edge). Útil si el vídeo pide login.")
+
+    # Opciones comunes. Van en un parser "padre" que heredan los subcomandos,
+    # así puedes ponerlas DETRÁS del comando (ej: "ingest ... --navegador chrome"),
+    # que es lo natural.
+    comunes = argparse.ArgumentParser(add_help=False)
+    comunes.add_argument("--config", help="Ruta a un config.yaml alternativo.")
+    comunes.add_argument("--whisper-modelo", dest="whisper_modelo",
+                         help="Modelo de whisper (tiny/base/small/medium/large-v3).")
+    comunes.add_argument("--idioma", help="Idioma del audio (por defecto es).")
+    comunes.add_argument("--device", help="Dispositivo de whisper (auto/cpu/cuda).")
+    comunes.add_argument("--data", help="Carpeta base de datos y caché.")
+    comunes.add_argument("--navegador", dest="navegador",
+                         help="Navegador del que tomar cookies para yt-dlp "
+                              "(chrome/firefox/edge). Útil si el vídeo pide login.")
 
     sub = p.add_subparsers(dest="comando", required=True)
 
     # ingest
-    pi = sub.add_parser("ingest", help="Procesa una entrada por el pipeline.")
+    pi = sub.add_parser("ingest", parents=[comunes],
+                        help="Procesa una entrada por el pipeline.")
     pi.add_argument("--fuente", required=True,
                     help="URL (.m3u8/.mp4) o ruta a un archivo local.")
     pi.add_argument("--programa", required=True, help="Nombre del programa.")
@@ -220,7 +225,7 @@ def _construir_parser() -> argparse.ArgumentParser:
     pi.set_defaults(func=_cmd_ingest)
 
     # ingest-batch
-    pb = sub.add_parser("ingest-batch",
+    pb = sub.add_parser("ingest-batch", parents=[comunes],
                         help="Procesa una cola de entradas desde un CSV.")
     pb.add_argument("csv", help="CSV con columnas: fuente,programa,fecha")
     pb.add_argument("--force", action="store_true",
@@ -230,12 +235,14 @@ def _construir_parser() -> argparse.ArgumentParser:
     pb.set_defaults(func=_cmd_ingest_batch)
 
     # list
-    pl = sub.add_parser("list", help="Lista las transcripciones almacenadas.")
+    pl = sub.add_parser("list", parents=[comunes],
+                        help="Lista las transcripciones almacenadas.")
     pl.add_argument("--programa", help="Filtra por nombre de programa.")
     pl.set_defaults(func=_cmd_list)
 
     # export
-    pe = sub.add_parser("export", help="Exporta a CSV y/o JSON.")
+    pe = sub.add_parser("export", parents=[comunes],
+                        help="Exporta a CSV y/o JSON.")
     pe.add_argument("--csv", nargs="?", const="transcripciones.csv",
                     help="Ruta del CSV de salida.")
     pe.add_argument("--json", nargs="?", const="transcripciones.json",
