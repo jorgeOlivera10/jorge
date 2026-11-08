@@ -25,7 +25,7 @@ def descargar_pagina(url: str, destino_dir: Path, slug: str,
     navegador, útil si el vídeo requiere haber iniciado sesión. Cacheado: si ya
     hay un archivo descargado para este slug, lo reutiliza.
     """
-    yt_dlp = comprobar_yt_dlp()
+    yt_dlp_cmd = comprobar_yt_dlp()
     destino_dir.mkdir(parents=True, exist_ok=True)
 
     # ¿Ya está descargado? (buscamos cualquier archivo que empiece por el slug)
@@ -36,8 +36,7 @@ def descargar_pagina(url: str, destino_dir: Path, slug: str,
 
     # Plantilla de salida: <slug>.<extensión que elija yt-dlp>
     plantilla = str(destino_dir / f"{slug}.%(ext)s")
-    cmd = [
-        yt_dlp,
+    cmd = list(yt_dlp_cmd) + [
         "-f", "bestaudio/best",   # nos basta con el audio
         "--no-playlist",          # solo este vídeo, no una lista entera
         "-o", plantilla,

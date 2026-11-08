@@ -5,8 +5,10 @@ No instala nada: solo verifica y da mensajes claros de qué hacer si falta.
 
 from __future__ import annotations
 
+import importlib.util
 import shutil
 import subprocess
+import sys
 
 
 class DependenciaFaltante(RuntimeError):
@@ -45,22 +47,30 @@ def comprobar_ffmpeg() -> str:
     return ruta
 
 
-def comprobar_yt_dlp() -> str:
-    """Verifica que yt-dlp esté disponible. Devuelve su ruta.
+def comprobar_yt_dlp() -> list[str]:
+    """Verifica que yt-dlp esté disponible. Devuelve el comando para invocarlo.
 
     Hace falta solo cuando la fuente es la URL de una página web (no un
     .m3u8 ni un archivo local). Lanza DependenciaFaltante con instrucciones.
+
+    Preferimos llamarlo como módulo del mismo Python ("python -m yt_dlp"),
+    porque así funciona aunque la carpeta de scripts de yt-dlp no esté en el
+    PATH (un lío habitual en Windows). Si no, caemos al ejecutable suelto.
     """
+    if importlib.util.find_spec("yt_dlp") is not None:
+        return [sys.executable, "-m", "yt_dlp"]
+
     ruta = shutil.which("yt-dlp")
-    if not ruta:
-        raise DependenciaFaltante(
-            "Has pasado la URL de una página web, y para resolverla hace falta "
-            "'yt-dlp', que no está instalado.\n"
-            "Instálalo con:  pip install -U yt-dlp\n"
-            "(O bien pasa directamente una URL .m3u8 o un archivo local, que no "
-            "necesitan yt-dlp.)"
-        )
-    return ruta
+    if ruta:
+        return [ruta]
+
+    raise DependenciaFaltante(
+        "Has pasado la URL de una página web, y para resolverla hace falta "
+        "'yt-dlp', que no está instalado.\n"
+        "Instálalo con:  py -m pip install -U yt-dlp\n"
+        "(O bien pasa directamente una URL .m3u8 o un archivo local, que no "
+        "necesitan yt-dlp.)"
+    )
 
 
 def comprobar_faster_whisper() -> None:
