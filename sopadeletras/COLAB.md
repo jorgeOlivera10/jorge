@@ -22,6 +22,32 @@ Pega cada bloque en una celda y ejecútalo en orden (▶️).
 !pip install -q faster-whisper
 ```
 
+## Celda 1b — Arreglar librerías de CUDA (si falla la GPU)
+
+En Colab a veces falta `libcublas.so.12` y la GPU da
+`RuntimeError: Library libcublas.so.12 is not found or cannot be loaded`.
+Esta celda instala las librerías de NVIDIA y las enlaza donde las busca
+faster-whisper. Ejecútala antes de cargar el modelo (Celda 3).
+
+```python
+!pip install -q nvidia-cublas-cu12 nvidia-cudnn-cu12
+import os, glob, nvidia.cublas.lib, nvidia.cudnn.lib
+
+destino = "/usr/lib/x86_64-linux-gnu"
+for pkg in (nvidia.cublas.lib, nvidia.cudnn.lib):
+    carpeta = os.path.dirname(pkg.__file__)
+    for so in glob.glob(os.path.join(carpeta, "*.so*")):
+        enlace = os.path.join(destino, os.path.basename(so))
+        if not os.path.lexists(enlace):
+            os.symlink(so, enlace)
+os.system("ldconfig")
+print("Librerias de CUDA enlazadas")
+```
+
+> Plan B sin GPU: si la GPU sigue dando guerra, en la Celda 3 pon
+> `device="cpu"` y `compute_type="int8"`. No necesita CUDA; va más lento que
+> la GPU pero sin líos.
+
 ## Celda 2 — Guardar resultados en Google Drive
 
 ```python
