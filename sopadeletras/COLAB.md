@@ -34,8 +34,8 @@ faster-whisper. Ejecútala antes de cargar el modelo (Celda 3).
 import os, glob, nvidia.cublas.lib, nvidia.cudnn.lib
 
 destino = "/usr/lib/x86_64-linux-gnu"
-for pkg in (nvidia.cublas.lib, nvidia.cudnn.lib):
-    carpeta = os.path.dirname(pkg.__file__)
+carpetas = list(nvidia.cublas.lib.__path__) + list(nvidia.cudnn.lib.__path__)
+for carpeta in carpetas:
     for so in glob.glob(os.path.join(carpeta, "*.so*")):
         enlace = os.path.join(destino, os.path.basename(so))
         if not os.path.lexists(enlace):
