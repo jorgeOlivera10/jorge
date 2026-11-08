@@ -39,19 +39,29 @@ print("Modelo listo en GPU")
 
 ## Celda 4 — Función descargar + transcribir
 
+> Nota: leemos el WAV a mano con `wave`+`numpy` y le pasamos el array a
+> faster-whisper. Esto evita un fallo conocido en Colab
+> (`TypeError: open() got an unexpected keyword argument 'metadata_errors'`)
+> por incompatibilidad entre faster-whisper y la librería PyAV al decodificar.
+
 ```python
-import subprocess, json, os
+import subprocess, json, os, wave
+import numpy as np
 
 def transcribir(fuente, programa, fecha, salida_dir="/content/drive/MyDrive/sopa"):
     os.makedirs(salida_dir, exist_ok=True)
     wav = "/content/audio.wav"
     print("Descargando audio con ffmpeg...")
     subprocess.run(
-        ["ffmpeg","-y","-i",fuente,"-vn","-ac","1","-ar","16000",wav],
+        ["ffmpeg","-y","-i",fuente,"-vn","-ac","1","-ar","16000","-f","wav",wav],
         check=True
     )
+    # Leemos el WAV directamente (evita el bug de PyAV con faster-whisper).
+    with wave.open(wav, "rb") as w:
+        frames = w.readframes(w.getnframes())
+    audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
     print("Transcribiendo (GPU)...")
-    segmentos_gen, info = model.transcribe(wav, language="es", beam_size=5)
+    segmentos_gen, info = model.transcribe(audio, language="es", beam_size=5)
     segmentos, partes = [], []
     for s in segmentos_gen:
         t = s.text.strip()
